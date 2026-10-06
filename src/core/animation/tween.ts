@@ -43,6 +43,17 @@ export const lerpNumber: Interpolate<number> = (from, to, t) => from + (to - fro
 
 export type TweenState = 'idle' | 'running' | 'finished' | 'cancelled';
 
+/**
+ * Any lifecycle a node can report. `'complete'` is used by scenes, which stay
+ * alive after their children finish for the same reason a tween does.
+ */
+export type LifecycleStatus = TweenState | 'complete';
+
+/** True when a node will never advance again. */
+export function isTerminal(status: LifecycleStatus | undefined): boolean {
+  return status === 'finished' || status === 'cancelled' || status === 'complete';
+}
+
 /** A single value animated over time. */
 export class Tween<T> {
   readonly from: T;
@@ -63,7 +74,7 @@ export class Tween<T> {
   private elapsed = 0;
   /** Index of the play currently in progress (0-based). */
   private iteration = 0;
-  private state: TweenState = 'idle';
+  private state: LifecycleStatus = 'idle';
   private started = false;
   private value: T;
   /** Milliseconds not consumed by the last {@link update}. */
@@ -86,7 +97,7 @@ export class Tween<T> {
     this.onComplete = options.on?.complete;
   }
 
-  get status(): TweenState {
+  get status(): LifecycleStatus {
     return this.state;
   }
 
@@ -264,7 +275,7 @@ export interface CompositeOptions {
 export interface Updatable {
   update(dt: number): number;
   cancel?(): void;
-  readonly status?: TweenState;
+  readonly status?: LifecycleStatus;
   /** 0..1 completion, when the implementation exposes one. */
   readonly progress?: number;
 }
@@ -272,14 +283,14 @@ export interface Updatable {
 /** Run children one after another, propagating unused time across seams. */
 export class Sequence implements Updatable {
   private index = 0;
-  private state: TweenState = 'idle';
+  private state: LifecycleStatus = 'idle';
   readonly items: Updatable[];
 
   constructor(items: Updatable[], private readonly options: CompositeOptions = {}) {
     this.items = items;
   }
 
-  get status(): TweenState {
+  get status(): LifecycleStatus {
     return this.state;
   }
 
@@ -304,8 +315,8 @@ export class Sequence implements Updatable {
 
     while (this.index < this.items.length) {
       remaining = this.items[this.index].update(remaining);
-      const status = this.items[this.index]['status'];
-      if (status === 'finished' || status === 'cancelled') {
+      const status = this.items[this.index].status;
+      if (isTerminal(status)) {
         this.index++;
         continue;
       }
@@ -324,14 +335,14 @@ export class Sequence implements Updatable {
 
 /** Run children simultaneously; completes when the last one completes. */
 export class Parallel implements Updatable {
-  private state: TweenState = 'idle';
+  private state: LifecycleStatus = 'idle';
   readonly items: Updatable[];
 
   constructor(items: Updatable[], private readonly options: CompositeOptions = {}) {
     this.items = items;
   }
 
-  get status(): TweenState {
+  get status(): LifecycleStatus {
     return this.state;
   }
 
@@ -360,7 +371,7 @@ export class Parallel implements Updatable {
     for (const item of this.items) {
       const left = item.update(remaining);
       if (left < minLeftover) minLeftover = left;
-      if (item['status'] !== 'finished' && item['status'] !== 'cancelled') allDone = false;
+      if (!isTerminal(item.status)) allDone = false;
     }
     if (allDone) {
       this.state = 'finished';
@@ -426,8 +437,7 @@ export class Animator {
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       item.update(dt);
-      const status = item['status'];
-      if (status === 'finished' || status === 'cancelled') continue;
+      if (isTerminal(item.status)) continue;
       this.items[live++] = item;
     }
     this.items.length = live;
