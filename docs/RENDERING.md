@@ -145,7 +145,40 @@ repainting. Full detail in `docs/EFFECTS.md`.
 4. Alpha is standard: `0` invisible, `255` opaque.
 5. Stale worker results are dropped *and* settle their promise.
 
-## 7. Tests
+## 7. Glyph and colour engine review
+
+Findings from a focused pass over `glyphTable.ts`, `compose.ts` and
+`color.ts`, each with a regression test:
+
+1. **Glyph interning overflow aliased unrelated glyphs.** Cells store
+   `Uint16Array` indices into an append-only table (space is always `0`). When
+   the table hit its 65,535-entry ceiling, `intern` returned *the last
+   interned glyph*, so a new character silently rendered as some other
+   character. It now resolves to space — a blank cell is honest, a wrong
+   glyph is a bug — and `tests/unit/canvas.test.ts` fills the table to prove
+   it (existing entries stay intact).
+2. **`composite()` allocated a filtered + sorted copy every frame** while its
+   header claimed "compositing never allocates". `needsOrdering()` now scans
+   the input first: an already-ordered, fully visible plane list (the normal
+   case — one or two layers) is walked in place, and only a list that really
+   needs filtering or sorting pays for the temporary array. The equivalence
+   test composites shuffled input (including a hidden plane) and compares
+   every channel against the sorted path.
+3. **xterm-256 mapping produced out-of-range cube indices.** The 6-level cube
+   is indexed 0..5, but `Math.round((255 - 35) / 40)` is `6`, so any channel
+   at exactly 255 indexed past the cube. Pure red (`0xff0000`) fell through to
+   the grey-ramp comparison and exported as a **grey** ANSI code instead of
+   `38;5;196`. The index is clamped to 5; primaries now land on their exact
+   cube slots (`196`, `46`, `21`, `226`, `201`, `51`) and every sample resolves
+   inside `ANSI256`. This affected the ANSI exporter and the 256-colour image
+   mapping in `renderImage.ts`.
+
+Colour science itself was left alone: luminance standards, `rgbToAnsi16`,
+HSL round-trips and the sRGB-linear path all behaved as documented and are
+covered by `tests/unit/color.test.ts`.
+
+## 8. Tests
+
 
 | Concern | Test |
 | --- | --- |

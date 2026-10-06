@@ -3,7 +3,9 @@
  *
  * The compositor walks planes bottom-to-top into a single {@link FrameBuffer},
  * honouring per-cell alpha and per-plane blend modes. The frame buffer is
- * allocated once and reused across frames; compositing never allocates.
+ * allocated once and reused across frames; compositing itself never allocates
+ * — an already-ordered, fully visible plane list is walked in place, and only
+ * a list that needs filtering or sorting pays for a temporary copy.
  */
 
 import { Attr, BlendMode, NO_CELL, clampAlpha } from './cell';
@@ -103,13 +105,25 @@ export interface CompositorStats {
  * `scratch` is the previous frame so the compositor can report how many cells
  * actually moved — the caller uses that to choose diff vs. full redraw.
  */
+/** True when the input must be filtered and/or sorted before compositing. */
+export function needsOrdering(planes: readonly Plane[]): boolean {
+  let prevZ = -Infinity;
+  for (const p of planes) {
+    if (!p.visible || p.width <= 0 || p.height <= 0) return true;
+    if (p.z < prevZ) return true;
+    prevZ = p.z;
+  }
+  return false;
+}
+
 export function composite(
   planes: readonly Plane[],
   target: FrameBuffer,
   scratch?: FrameBuffer,
 ): CompositorStats {
-  const ordered = planes.filter((p) => p.visible && p.width > 0 && p.height > 0);
-  ordered.sort((a, b) => a.z - b.z);
+  const ordered: readonly Plane[] = needsOrdering(planes)
+    ? planes.filter((p) => p.visible && p.width > 0 && p.height > 0).sort((a, b) => a.z - b.z)
+    : planes;
 
   const n = target.width * target.height;
   target.glyph.fill(0);

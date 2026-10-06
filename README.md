@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-751%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-756%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -107,6 +107,8 @@ Implemented and covered by the test suite:
 | Signature demo + golden-frame visual regression (`npm run demo`) | working |
 | Command palette (Ctrl+K) with tested ranking + registry-driven sections | working |
 | Quality modes + adaptive controller + debug overlay (Settings > Performance) | working |
+| Visual-golden fixtures (banner, blue-noise render, signature fx) + determinism | working |
+| Glyph/compositor/colour review: overflow, allocation-free ordering, ANSI-256 fix | working |
 | Benchmarks: `npm run bench` and `npm run bench:engines` with published numbers | working |
 | Drag-and-drop import of PNG, JPEG, WEBP, BMP, GIF (auto-sized grid) | working |
 | Electron packaging (NSIS installer, desktop shortcut) | working |
@@ -226,7 +228,7 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 751 tests / 37 files, ~8 s
+npm test                          # 756 tests / 37 files, ~8 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios

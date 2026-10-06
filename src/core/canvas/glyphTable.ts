@@ -15,7 +15,9 @@ export class GlyphTable {
   intern(glyph: string): number {
     const existing = this.index.get(glyph);
     if (existing !== undefined) return existing;
-    if (this.list.length >= MAX_GLYPHS) return this.list.length - 1;
+    // Table full: the glyph cannot be stored, so resolve to space (0) rather
+    // than silently aliasing it onto whatever glyph happens to be last.
+    if (this.list.length >= MAX_GLYPHS) return 0;
     const id = this.list.length;
     this.list.push(glyph);
     this.index.set(glyph, id);

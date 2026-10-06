@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Attr, NO_CELL, luminance, parseHex, rgb, toHex, unpackRgb } from '../../src/core/canvas/cell';
-import { FrameBuffer, composite } from '../../src/core/canvas/compose';
+import { FrameBuffer, composite, needsOrdering } from '../../src/core/canvas/compose';
 import { DirtyRegions } from '../../src/core/canvas/dirty';
 import { diffFrames } from '../../src/core/canvas/diff';
 import { GlyphTable } from '../../src/core/canvas/glyphTable';
@@ -316,5 +316,54 @@ describe('VirtualCanvas', () => {
     canvas.render();
     expect(canvas.lastDirtyRatio).toBeGreaterThan(0);
     expect(canvas.lastDirtyRatio).toBeLessThan(1);
+  });
+});
+
+describe('glyph interning limits', () => {
+  it('falls back to space instead of aliasing another glyph when full', () => {
+    const table = new GlyphTable();
+    // Fill to the Uint16 ceiling (ids 1..65534 on top of the initial space).
+    for (let i = 0; i < 0xffff - 1; i++) {
+      expect(table.intern(`g${i}`)).toBe(i + 1);
+    }
+    expect(table.size).toBe(0xffff);
+    expect(table.intern('over-capacity')).toBe(0);
+    expect(table.resolve(0)).toBe(' ');
+    // Existing entries are untouched by the overflow.
+    expect(table.resolve(1)).toBe('g0');
+    expect(table.intern('g0')).toBe(1);
+  });
+});
+
+describe('compositor ordering', () => {
+  const planeAt = (z: number, glyph: string, color: number, visible = true): Plane => {
+    const plane = new Plane(4, 3, { z, visible });
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 4; x++) plane.setGlyph(x, y, glyph, color);
+    return plane;
+  };
+
+  it('detects when an input actually needs filtering or sorting', () => {
+    expect(needsOrdering([planeAt(0, 'a', 0xffffff), planeAt(1, 'b', 0xffffff)])).toBe(false);
+    expect(needsOrdering([])).toBe(false);
+    expect(needsOrdering([planeAt(1, 'a', 0xffffff), planeAt(0, 'b', 0xffffff)])).toBe(true);
+    expect(needsOrdering([planeAt(0, 'a', 0xffffff), planeAt(1, 'b', 0xffffff, false)])).toBe(true);
+  });
+
+  it('composites identically whether or not the input needs ordering', () => {
+    const low = planeAt(0, 'l', 0x111111);
+    const mid = planeAt(1, 'm', 0x222222);
+    const high = planeAt(2, 'h', 0x333333);
+    const hidden = planeAt(3, 'x', 0x444444, false);
+
+    const sorted = new FrameBuffer(4, 3);
+    const shuffled = new FrameBuffer(4, 3);
+    composite([low, mid, high], sorted);
+    composite([hidden, high, low, mid], shuffled);
+
+    expect(Array.from(shuffled.glyph)).toEqual(Array.from(sorted.glyph));
+    expect(Array.from(shuffled.fg)).toEqual(Array.from(sorted.fg));
+    expect(Array.from(shuffled.bg)).toEqual(Array.from(sorted.bg));
+    expect(Array.from(shuffled.alpha)).toEqual(Array.from(sorted.alpha));
+    expect(needsOrdering([hidden, high, low, mid])).toBe(true);
   });
 });

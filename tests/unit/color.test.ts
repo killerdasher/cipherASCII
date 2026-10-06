@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANSI256,
   rgb,
   red,
   green,
@@ -47,6 +48,27 @@ describe('color', () => {
     it('maps to 0..255', () => {
       expect(rgbToAnsi256(0x000000)).toBeLessThan(256);
       expect(rgbToAnsi256(0xffffff)).toBeLessThan(256);
+    });
+
+    it('hits the exact cube slot for saturated primaries', () => {
+      // Regression: Math.round((255 - 35) / 40) is 6, which used to index past
+      // the cube and send pure red to the grey ramp instead of index 196.
+      expect(rgbToAnsi256(0xff0000)).toBe(196);
+      expect(rgbToAnsi256(0x00ff00)).toBe(46);
+      expect(rgbToAnsi256(0x0000ff)).toBe(21);
+      expect(rgbToAnsi256(0xffff00)).toBe(226);
+      expect(rgbToAnsi256(0xff00ff)).toBe(201);
+      expect(rgbToAnsi256(0x00ffff)).toBe(51);
+    });
+
+    it('always resolves inside the palette', () => {
+      const samples = [0x000000, 0xffffff, 0xff0000, 0x010101, 0xfefefe, 0x123456, 0x808080, 0x7f7f7f, 0x203040];
+      for (const c of samples) {
+        const idx = rgbToAnsi256(c);
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(idx).toBeLessThan(256);
+        expect(ANSI256[idx]).toBeDefined();
+      }
     });
   });
 

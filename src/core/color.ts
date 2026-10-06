@@ -117,7 +117,9 @@ export function rgbToAnsi256(color: number): number {
     return Math.round(((r - 8) / 247) * 24) + 232;
   }
 
-  const to6 = (c: number) => (c < 48 ? 0 : c < 114 ? 1 : Math.round((c - 35) / 40));
+  // The cube has 6 levels (0..5); Math.round((255 - 35) / 40) is 6, which
+  // would index past the palette (and made pure red fall back to a grey).
+  const to6 = (c: number) => (c < 48 ? 0 : c < 114 ? 1 : Math.min(5, Math.round((c - 35) / 40)));
   const idx = 16 + 36 * to6(r) + 6 * to6(g) + to6(b);
 
   // Compare against the grayscale ramp as well, keep whichever is closer.
