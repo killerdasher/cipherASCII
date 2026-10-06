@@ -1,0 +1,24 @@
+#*+=::#**=+:#=+..:##+=.:
+b2deff b8e1ff bfe3ff c5e6ff 88ccff d1ebff 88ccff dcf0ff 88ccff dff1ff 88ccff dbf0ff dbf0ff 88ccff dff1ff 88ccff dcf0ff 88ccff d1ebff 88ccff c5e6ff bfe3ff b8e1ff b2deff
++==.:#*+=.=#*.=.:#*+*.+=
+88ccff 88ccff c2e5ff 88ccff cfebff d6edff dcf0ff e1f2ff ddf0ff d8eeff 88ccff d4ecff d4ecff 88ccff d8eeff ddf0ff e1f2ff dcf0ff d6edff cfebff 88ccff c2e5ff 88ccff 88ccff
++=.:#**=+:#*+=.:##+*.:#*
+b7e0ff bee3ff c5e6ff cce9ff 88ccff d9efff 88ccff ddf0ff 88ccff d2ecff ceeaff cce9ff cce9ff ceeaff d2ecff 88ccff ddf0ff 88ccff d9efff 88ccff cce9ff c5e6ff bee3ff b7e0ff
+=.::*+=.:.*+=.:#*+=.+#=.
+88ccff 88ccff c7e7ff 88ccff d6edff ddf0ff dff1ff d8eeff d2ecff 88ccff c8e7ff c5e6ff c5e6ff c8e7ff 88ccff d2ecff d8eeff dff1ff ddf0ff d6edff 88ccff c7e7ff 88ccff 88ccff
+.:#**=+=#*+=.:#*#*.+#*+=
+bae1ff c1e5ff c9e8ff d0ebff 88ccff dff1ff 88ccff 88ccff ceeaff c8e7ff c2e5ff bee3ff bee3ff c2e5ff c8e7ff ceeaff 88ccff 88ccff dff1ff 88ccff d0ebff c9e8ff c1e5ff bae1ff
+.:*#=.:#*+=.:#*+=.:#=+.:
+88ccff 88ccff cae8ff 88ccff d8eeff e0f2ff dbf0ff d4ecff cce9ff c5e6ff bee3ff b7e0ff b7e0ff bee3ff c5e6ff cce9ff d4ecff dbf0ff e0f2ff d8eeff d1ebff cae8ff c2e5ff bbe2ff
+:#+*.:#*+=.:#*+=.:#*.=:#
+88ccff 88ccff cae8ff 88ccff d8eeff e0f2ff dbf0ff d4ecff cce9ff c5e6ff bee3ff b7e0ff b7e0ff bee3ff c5e6ff cce9ff d4ecff dbf0ff e0f2ff d8eeff d1ebff cae8ff c2e5ff bbe2ff
+*+=.+#=.=.:#*+=.*+*==.:#
+bae1ff c1e5ff c9e8ff d0ebff d7eeff dff1ff ddf0ff d5edff ceeaff c8e7ff c2e5ff bee3ff bee3ff c2e5ff c8e7ff ceeaff d5edff ddf0ff dff1ff d7eeff d0ebff c9e8ff c1e5ff bae1ff
+#*.+#*+=.:#*+=#:#*+=::#*
+b9e1ff c0e4ff c7e7ff ceeaff d6edff ddf0ff dff1ff d8eeff d2ecff cce9ff c8e7ff c5e6ff c5e6ff c8e7ff cce9ff d2ecff d8eeff dff1ff ddf0ff d6edff ceeaff c7e7ff c0e4ff b9e1ff
+=.:#=+..:#*+=.:+*==.:#*+
+b7e0ff bee3ff c5e6ff cce9ff d3ecff d9efff e0f2ff ddf0ff d7eeff d2ecff ceeaff cce9ff cce9ff ceeaff d2ecff d7eeff ddf0ff e0f2ff d9efff d3ecff cce9ff c5e6ff bee3ff b7e0ff
+*+#=+=.:#*#=.*#*+=.:#**+
+b5dfff bbe2ff c2e5ff c9e8ff cfebff d6edff dcf0ff e1f2ff ddf0ff d8eeff d5edff d4ecff d4ecff d5edff d8eeff ddf0ff e1f2ff dcf0ff d6edff cfebff c9e8ff c2e5ff bbe2ff b5dfff
+:#*+..:##+*.:+*==.::*+=.
+b2deff b8e1ff bfe3ff c5e6ff cbe9ff d1ebff d7eeff dcf0ff e0f2ff dff1ff ddf0ff dbf0ff dbf0ff ddf0ff dff1ff e0f2ff dcf0ff d7eeff d1ebff cbe9ff c5e6ff bfe3ff b8e1ff b2deff

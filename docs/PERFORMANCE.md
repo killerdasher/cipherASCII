@@ -206,6 +206,9 @@ npm ci
 npm test && npm run lint && npm run typecheck
 npm run bench
 npm run bench:engines
+npm run demo
+# rewrite visual-golden fixtures after an intentional change:
+UPDATE_GOLDEN=1 npx vitest run tests/unit/golden.test.ts
 ```
 
 Absolute numbers vary by machine; the ratios (clone-per-cell vs clone-once,

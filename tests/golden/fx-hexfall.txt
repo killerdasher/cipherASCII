@@ -1,0 +1,24 @@
+# %7> 2*+ E: *  .   #   
+88ccff ffffffff 88ccff 88ccff 98d3ff ffffffff 98d3ff 88ccff 88ccff ffffffff 88ccff 88ccff ffffffff 88ccff ffffffff ffffffff 88ccff ffffffff ffffffff ffffffff 88ccff ffffffff ffffffff ffffffff
+* D2& /+= 9# +  :   B  6
+88ccff ffffffff 98d3ff 98d3ff a8daff ffffffff a8daff 88ccff 88ccff ffffffff 98d3ff 88ccff ffffffff 88ccff ffffffff ffffffff 88ccff ffffffff ffffffff ffffffff 98d3ff ffffffff ffffffff 88ccff
++ 8/# +=. 4* =  # 0 6  1
+88ccff ffffffff a8daff a8daff e7f5ff ffffffff e7f5ff 88ccff 88ccff ffffffff a8daff 88ccff ffffffff 88ccff ffffffff ffffffff 88ccff ffffffff 88ccff ffffffff a8daff ffffffff ffffffff 98d3ff
+= :#   .: *+ .  * < :% >
+88ccff ffffffff e7f5ff e7f5ff ffffffff ffffffff ffffffff 88ccff 88ccff ffffffff e7f5ff 88ccff ffffffff 88ccff ffffffff ffffffff 88ccff ffffffff 98d3ff ffffffff e7f5ff 88ccff ffffffff a8daff
+.    + :#5 = :6 + %  D =
+88ccff ffffffff ffffffff ffffffff ffffffff 88ccff ffffffff 88ccff 88ccff 88ccff ffffffff 88ccff ffffffff 88ccff 88ccff ffffffff 88ccff ffffffff a8daff ffffffff ffffffff 98d3ff ffffffff e7f5ff
+:    # #*0 .<#1 = :2 8  
+88ccff ffffffff ffffffff ffffffff ffffffff 98d3ff ffffffff 88ccff 88ccff 98d3ff ffffffff 88ccff 88ccff 88ccff 98d3ff ffffffff 88ccff ffffffff e7f5ff 88ccff ffffffff a8daff ffffffff ffffffff
+#    B *+< :%*> .  / =* 
+88ccff ffffffff ffffffff ffffffff ffffffff a8daff ffffffff 88ccff 88ccff a8daff ffffffff 88ccff 98d3ff 88ccff a8daff ffffffff 88ccff ffffffff ffffffff 98d3ff ffffffff e7f5ff 88ccff ffffffff
+*=   # +=. #D+= :  *  F 
+88ccff 88ccff ffffffff ffffffff ffffffff e7f5ff ffffffff 88ccff 88ccff e7f5ff ffffffff 88ccff a8daff 88ccff e7f5ff ffffffff 88ccff ffffffff ffffffff a8daff ffffffff ffffffff 98d3ff ffffffff
++$     =.  *+= 3#  =  A 
+88ccff 98d3ff ffffffff ffffffff ffffffff ffffffff ffffffff 88ccff 88ccff ffffffff ffffffff 88ccff e7f5ff 88ccff ffffffff 88ccff 88ccff ffffffff ffffffff e7f5ff ffffffff ffffffff a8daff ffffffff
+=C     .:  + . \*4    * 
+88ccff a8daff ffffffff ffffffff ffffffff ffffffff ffffffff 88ccff 88ccff ffffffff ffffffff 88ccff ffffffff 88ccff ffffffff 98d3ff 88ccff 88ccff ffffffff ffffffff ffffffff ffffffff e7f5ff ffffffff
+.:     :#  = : ++|      
+88ccff e7f5ff ffffffff ffffffff ffffffff ffffffff ffffffff 88ccff 88ccff ffffffff ffffffff 88ccff ffffffff 88ccff ffffffff a8daff 88ccff 98d3ff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff
+:      #*  . # +==      
+88ccff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff 88ccff 88ccff ffffffff ffffffff 88ccff ffffffff 88ccff ffffffff e7f5ff 88ccff a8daff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff

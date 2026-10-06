@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-744%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-751%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -226,12 +226,20 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 744 tests / 36 files, ~7 s
+npm test                          # 751 tests / 37 files, ~8 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
 npm run simulations               # algorithm simulations
 npm run electron:build            # full package
+```
+
+Visual regression lives in `tests/golden/` (text banner, blue-noise image
+render, one frame per signature effect at seed 42). After an intentional
+change, rewrite and commit them:
+
+```bash
+UPDATE_GOLDEN=1 npx vitest run tests/unit/golden.test.ts
 ```
 
 Measured numbers, with the commands that produced them, live in
