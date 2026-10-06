@@ -25,7 +25,9 @@
     "electron:build": "npm run build && npm run build:electron && electron-builder",
     "electron:pack": "npm run build && npm run build:electron && electron-builder --dir",
     "electron:preview": "npm run build:electron && electron .",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "bench:engines": "vitest run --config vitest.scripts.config.ts scripts/engines.bench.ts",
+    "demo": "vitest run --config vitest.scripts.config.ts scripts/cipher-demo.ts"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",

@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Config for `npm run bench` and `npm run simulations`.
+ * Config for `npm run bench`, `npm run simulations`, `npm run bench:engines`
+ * and `npm run demo`.
  *
  * Those entry points live in `scripts/` and are written as vitest suites so the
  * project's extensionless TypeScript imports resolve through Vite exactly as
@@ -12,7 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['scripts/**/*.bench.ts'],
+    include: ['scripts/**/*.bench.ts', 'scripts/cipher-demo.ts'],
     testTimeout: 600000,
     hookTimeout: 600000,
     reporters: ['default'],
