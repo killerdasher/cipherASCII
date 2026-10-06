@@ -1,3 +1,5 @@
+import type { CellEffectEntry } from './fx/pipeline';
+
 /**
  * Core data contracts for ASCII Art Studio.
  *
@@ -509,6 +511,8 @@ export interface Document {
   guides: Guide[];
   /** Effects pipeline for post-processing. */
   effectsPipeline: EffectsPipeline;
+  /** Cell-level animation effects (glyph grid), played by the live runtime. */
+  cellEffects: CellEffectEntry[];
   /** Active palette ID. */
   paletteId: string | null;
   /** Animation timeline. */
@@ -905,6 +909,7 @@ export interface ToolState {
 export interface DocumentExtensions {
   paletteId?: string;
   effectsPipeline: EffectsPipeline;
+  cellEffects?: CellEffectEntry[];
   timeline?: Timeline;
   renderPresets: RenderPreset[];
   viewport: ViewportState;

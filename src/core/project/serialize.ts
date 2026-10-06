@@ -5,6 +5,7 @@
  * validated before it becomes a {@link Document}.
  */
 
+import type { CellEffectEntry } from '../fx/pipeline';
 import {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_SUBTEXTURE,
@@ -189,6 +190,53 @@ export function deserializeProject(json: string): Result<Document> {
  * @param doc - validated document to migrate
  * @returns the canonical current-version document, or the migration error
  */
+
+const CELL_MASK_KINDS = new Set(['all', 'rect', 'rows', 'columns', 'checker', 'band']);
+
+/**
+ * Repair a saved cell-effect stack.
+ *
+ * Entries are validated field by field rather than trusted: a hand-edited
+ * project must never be able to feed a malformed mask or a NaN parameter into
+ * the render loop. Unknown effect ids are kept — the pipeline simply leaves
+ * them unbound.
+ */
+function canonicalCellEffects(value: unknown): CellEffectEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: CellEffectEntry[] = [];
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    const effect = raw.effect;
+    if (typeof effect !== 'string' || effect.length === 0) continue;
+    const entry: CellEffectEntry = { effect };
+    if (raw.enabled === false) entry.enabled = false;
+    if (typeof raw.intensity === 'number' && Number.isFinite(raw.intensity)) {
+      entry.intensity = Math.min(1, Math.max(0, raw.intensity));
+    }
+    if (typeof raw.delay === 'number' && Number.isFinite(raw.delay) && raw.delay >= 0) {
+      entry.delay = raw.delay;
+    }
+    if (isPlainObject(raw.params)) {
+      const params: Record<string, number> = {};
+      for (const [key, v] of Object.entries(raw.params)) {
+        if (typeof v === 'number' && Number.isFinite(v)) params[key] = v;
+      }
+      if (Object.keys(params).length > 0) entry.params = params;
+    }
+    if (isPlainObject(raw.mask) && typeof raw.mask.kind === 'string' && CELL_MASK_KINDS.has(raw.mask.kind)) {
+      const mask: Record<string, unknown> = { kind: raw.mask.kind };
+      for (const key of ['x', 'y', 'w', 'h', 'rowStart', 'rowEnd', 'colStart', 'colEnd', 'cell', 'thickness']) {
+        const v = raw.mask[key];
+        if (typeof v === 'number' && Number.isFinite(v)) mask[key] = v;
+      }
+      if (typeof raw.mask.origin === 'string') mask.origin = raw.mask.origin;
+      entry.mask = mask as unknown as CellEffectEntry['mask'];
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
 export function migrateDocument(doc: Document): Result<Document> {
   try {
     if (!isPlainObject(doc)) return err('invalid-project', 'project must be an object');
@@ -223,6 +271,7 @@ export function migrateDocument(doc: Document): Result<Document> {
       editor: canonicalEditor(doc.editor, fallback.editor),
       guides: canonicalGuides(doc.guides),
       effectsPipeline: doc.effectsPipeline ?? fallback.effectsPipeline,
+      cellEffects: canonicalCellEffects(doc.cellEffects),
       paletteId: doc.paletteId ?? null,
       timeline: doc.timeline ?? null,
       renderPresets: Array.isArray(doc.renderPresets) ? doc.renderPresets : [],

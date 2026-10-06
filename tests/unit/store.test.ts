@@ -42,3 +42,66 @@ describe('view state', () => {
     expect(useStore.getState().renderGeneration).toBe(gen);
   });
 });
+
+describe('cell effects', () => {
+  beforeEach(() => {
+    useStore.setState({ cellEffects: [], fxSeed: 0x5eed, isDirty: false });
+  });
+
+  it('adds an entry with resolved parameter defaults', () => {
+    useStore.getState().addCellEffect('cipherlock');
+    const entries = useStore.getState().cellEffects;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].effect).toBe('cipherlock');
+    expect(entries[0].enabled).toBe(true);
+    expect(entries[0].params?.scroll).toBe(26);
+  });
+
+  it('ignores unknown effect ids', () => {
+    useStore.getState().addCellEffect('not-a-real-effect');
+    expect(useStore.getState().cellEffects).toHaveLength(0);
+  });
+
+  it('edits, reorders and removes entries immutably', () => {
+    const add = useStore.getState().addCellEffect;
+    add('rain');
+    add('glitch');
+    add('pulse');
+    const before = useStore.getState().cellEffects;
+    useStore.getState().updateCellEffectParams(0, { speed: 40 });
+    const afterParams = useStore.getState().cellEffects;
+    expect(afterParams).not.toBe(before);
+    expect(afterParams[0].params?.speed).toBe(40);
+    expect(afterParams[1]).toBe(before[1]); // untouched entries keep identity
+
+    useStore.getState().reorderCellEffect(0, 2);
+    expect(useStore.getState().cellEffects.map((e) => e.effect)).toEqual([
+      'glitch',
+      'pulse',
+      'rain',
+    ]);
+
+    useStore.getState().setCellEffectIntensity(1, 0.25);
+    expect(useStore.getState().cellEffects[1].intensity).toBe(0.25);
+    useStore.getState().setCellEffectEnabled(1, false);
+    expect(useStore.getState().cellEffects[1].enabled).toBe(false);
+
+    useStore.getState().removeCellEffect(1);
+    expect(useStore.getState().cellEffects.map((e) => e.effect)).toEqual(['glitch', 'rain']);
+  });
+
+  it('mirrors the stack into the document so the project file keeps it', () => {
+    useStore.getState().addCellEffect('hexfall');
+    expect(useStore.getState().document.cellEffects).toHaveLength(1);
+    expect(useStore.getState().isDirty).toBe(true);
+    useStore.getState().resetCellEffects();
+    expect(useStore.getState().cellEffects).toHaveLength(0);
+    expect(useStore.getState().document.cellEffects).toHaveLength(0);
+  });
+
+  it('restores a stack when a project is loaded', () => {
+    const doc = { ...useStore.getState().document, cellEffects: [{ effect: 'keyshift' }] };
+    useStore.getState().setDocument(doc);
+    expect(useStore.getState().cellEffects).toEqual([{ effect: 'keyshift' }]);
+  });
+});

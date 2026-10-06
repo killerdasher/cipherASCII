@@ -44,6 +44,9 @@ import { bumpGeneration } from '../worker/client';
 import { THEME_PRESETS, getDefaultTheme, applyTheme, createCustomTheme } from '../core/theme/theme';
 import { PRESET_PALETTES } from '../core/palette/palette';
 import { createEffectsPipeline, DEFAULT_EFFECT_PARAMS, addEffect, removeEffect, reorderEffects, updateEffectParams, setEffectEnabled, setEffectIntensity } from '../core/effects/pipeline';
+import type { CellEffectEntry } from '../core/fx/pipeline';
+import { appendCellEffect, removeCellEffectAt, moveCellEffect, patchCellEffect, setCellEffectParams } from '../core/fx/entries';
+import { getCellEffect as getRegistryEffect, resolveParams } from '../core/fx';
 import { createTimeline, addTrack, removeTrack, setKeyframe, removeKeyframe } from '../core/timeline/timeline';
 
 interface FileHandle {
@@ -74,6 +77,10 @@ export interface AppState {
 
   // Effects pipeline
   effectsPipeline: EffectsPipeline;
+  /** Cell-level (glyph) effects played by the live runtime. */
+  cellEffects: CellEffectEntry[];
+  /** Seed for the cell-effect RNG; the same seed always draws the same frame. */
+  fxSeed: number;
 
   // Timeline / Animation
   timeline: Timeline | null;
@@ -173,6 +180,18 @@ export interface AppState {
   setEffectIntensity: (index: number, intensity: number) => void;
   resetEffectsPipeline: () => void;
 
+  // Actions - Cell effects (glyph-grid animations)
+  addCellEffect: (effectId: string, params?: Record<string, number>) => void;
+  removeCellEffect: (index: number) => void;
+  reorderCellEffect: (fromIndex: number, toIndex: number) => void;
+  updateCellEffectParams: (index: number, params: Record<string, number>) => void;
+  setCellEffectEnabled: (index: number, enabled: boolean) => void;
+  setCellEffectIntensity: (index: number, intensity: number) => void;
+  setCellEffectMask: (index: number, mask: CellEffectEntry['mask']) => void;
+  setCellEffectDelay: (index: number, delay: number) => void;
+  resetCellEffects: () => void;
+  setFxSeed: (seed: number) => void;
+
   // Actions - Timeline
   createTimeline: (name?: string, fps?: number, duration?: number) => void;
   setActiveTimeline: (timelineId: string | null) => void;
@@ -260,6 +279,13 @@ export const useStore = create<AppState>()(
       get().triggerRender();
     };
 
+    // Cell effects are preview state too: mirror them into the document so the
+    // project file round-trips the stack.
+    const commitCellEffects = (next: CellEffectEntry[]): void => {
+      const doc = get().document;
+      set({ cellEffects: next, document: { ...doc, cellEffects: next }, isDirty: true });
+    };
+
     // Does moving between two documents change what the worker should draw?
     const renderSettingsChanged = (a: Document, b: Document): boolean =>
       JSON.stringify(a.imageSettings) !== JSON.stringify(b.imageSettings) ||
@@ -276,6 +302,8 @@ export const useStore = create<AppState>()(
       lastRenderStats: null,
 
       effectsPipeline: defaultEffectsPipeline,
+      cellEffects: [],
+      fxSeed: 0x5eed,
       timeline: defaultTimeline,
       timelines: [defaultTimeline],
       activeTimelineId: defaultTimeline.id,
@@ -322,6 +350,7 @@ export const useStore = create<AppState>()(
           isDirty: false,
           fileHandle: null,
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
+          cellEffects: doc.cellEffects ?? [],
         });
         get().triggerRender();
       },
@@ -334,6 +363,7 @@ export const useStore = create<AppState>()(
           fileHandle: handle ?? null,
           // A loaded project carries its own effects stack.
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
+          cellEffects: doc.cellEffects ?? [],
         });
         get().triggerRender();
       },
@@ -359,6 +389,7 @@ export const useStore = create<AppState>()(
             document: prev,
             isDirty: true,
             effectsPipeline: prev.effectsPipeline ?? createEffectsPipeline(),
+            cellEffects: prev.cellEffects ?? [],
           });
           // Only re-render when the undo restored render-affecting settings;
           // re-rendering a paint undo would regenerate the layer and wipe it.
@@ -374,6 +405,7 @@ export const useStore = create<AppState>()(
             document: next,
             isDirty: true,
             effectsPipeline: next.effectsPipeline ?? createEffectsPipeline(),
+            cellEffects: next.cellEffects ?? [],
           });
           if (renderSettingsChanged(document, next)) get().triggerRender();
         }
@@ -584,6 +616,47 @@ export const useStore = create<AppState>()(
 
       resetEffectsPipeline: () => {
         commitEffects(createEffectsPipeline());
+      },
+
+      // Cell effects
+      addCellEffect: (effectId, params) => {
+        const effect = getRegistryEffect(effectId);
+        if (!effect) return;
+        commitCellEffects(
+          appendCellEffect(get().cellEffects, {
+            effect: effectId,
+            enabled: true,
+            intensity: 1,
+            params: resolveParams(effect, params),
+          }),
+        );
+      },
+
+      removeCellEffect: (index) => commitCellEffects(removeCellEffectAt(get().cellEffects, index)),
+
+      reorderCellEffect: (fromIndex, toIndex) =>
+        commitCellEffects(moveCellEffect(get().cellEffects, fromIndex, toIndex)),
+
+      updateCellEffectParams: (index, params) =>
+        commitCellEffects(setCellEffectParams(get().cellEffects, index, params)),
+
+      setCellEffectEnabled: (index, enabled) =>
+        commitCellEffects(patchCellEffect(get().cellEffects, index, { enabled })),
+
+      setCellEffectIntensity: (index, intensity) =>
+        commitCellEffects(patchCellEffect(get().cellEffects, index, { intensity })),
+
+      setCellEffectMask: (index, mask) =>
+        commitCellEffects(patchCellEffect(get().cellEffects, index, { mask })),
+
+      setCellEffectDelay: (index, delay) =>
+        commitCellEffects(patchCellEffect(get().cellEffects, index, { delay })),
+
+      resetCellEffects: () => commitCellEffects([]),
+
+      setFxSeed: (seed) => {
+        const doc = get().document;
+        set({ fxSeed: seed | 0, document: { ...doc }, isDirty: true });
       },
 
       // Timeline
@@ -810,6 +883,8 @@ export const selectIsDirty = (state: AppState) => state.isDirty;
 export const selectRenderGeneration = (state: AppState) => state.renderGeneration;
 export const selectPendingRender = (state: AppState) => state.pendingRender;
 export const selectEffectsPipeline = (state: AppState) => state.effectsPipeline;
+export const selectCellEffects = (state: AppState) => state.cellEffects;
+export const selectFxSeed = (state: AppState) => state.fxSeed;
 export const selectTimeline = (state: AppState) => state.timeline;
 export const selectTimelines = (state: AppState) => state.timelines;
 export const selectActiveTimelineId = (state: AppState) => state.activeTimelineId;

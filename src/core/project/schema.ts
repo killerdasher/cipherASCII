@@ -324,6 +324,7 @@ export function createDocument(overrides: Partial<Document> = {}): Document {
     editor: defaultEditor(),
     guides: [],
     effectsPipeline: createEffectsPipeline(),
+    cellEffects: [],
     paletteId: null,
     timeline: null,
     renderPresets: [],

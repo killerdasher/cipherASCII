@@ -6,6 +6,7 @@ import { applySubtexture, shouldApplySubtexture } from '../core/subtexture';
 import { applyTimelineToDocument, getOnionSkinFrames } from '../core/timeline/timeline';
 import { timelineHasAnimation } from '../core/timeline/playback';
 import { useStore } from '../store';
+import { cellFxRuntime } from '../core/fx';
 import { PixiViewport } from './PixiViewport';
 
 interface EditorCanvasProps {
@@ -147,6 +148,10 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   const gpuPreview = useStore((s) => s.gpuPreview);
   const tool = useStore((s) => s.tool);
   const timeline = useStore((s) => s.timeline);
+  const cellEffects = useStore((s) => s.cellEffects);
+  const fxSeed = useStore((s) => s.fxSeed);
+  // Live cell-effect output. `null` means "paint the plain composed document".
+  const [fxGrid, setFxGrid] = useState<AsciiGrid | null>(null);
 
   // Animated documents: while the timeline has keyframes the editor composes
   // the frame under the playhead instead of the raw document. Pure - the
@@ -204,7 +209,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     const fg = readVar('--fg', '#d4d4d8');
     const border = readVar('--border', '#333333');
 
-    const grid = composedGrid;
+    const grid = fxGrid ?? composedGrid;
     const cellW = CELL_W * zoomLevel;
     const cellH = CELL_H * zoomLevel;
     canvas.width = grid.width * cellW;
@@ -283,7 +288,39 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
 
     // Hand the finished raster to the GPU viewport (if one is watching).
     canvas.dataset.rasterRev = String(++rasterRev);
-  }, [composedGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview]);
+  }, [composedGrid, fxGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview]);
+
+  // Cell-effect playback: advance the runtime at frame rate and repaint only
+  // while it can still change pixels. The loop stops itself once every
+  // one-shot has settled, so an idle editor costs zero frames.
+  useEffect(() => {
+    cellFxRuntime.sync(cellEffects, fxSeed);
+    if (cellEffects.length === 0) {
+      setFxGrid(null);
+      return;
+    }
+    let raf = 0;
+    let alive = true;
+    let last = performance.now();
+    const tick = (now: number) => {
+      if (!alive) return;
+      const dt = Math.min(64, Math.max(1, now - last));
+      last = now;
+      const next = cellFxRuntime.frame(composedGrid, dt);
+      if (next) {
+        setFxGrid(next);
+      } else if (!cellFxRuntime.needsFrames) {
+        setFxGrid(null);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+    };
+  }, [cellEffects, fxSeed, composedGrid]);
 
   const cellAt = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const rect = e.currentTarget.getBoundingClientRect();

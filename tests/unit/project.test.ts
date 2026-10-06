@@ -177,6 +177,59 @@ describe('serializeProject / deserializeProject', () => {
     expect(failure(deserializeProject(future)).code).toBe('unsupported-version');
   });
 
+  it('round-trips the cell-effect stack including masks and parameters', () => {
+    const original: Document = {
+      ...sampleDocument(),
+      cellEffects: [
+        {
+          effect: 'cipherlock',
+          intensity: 0.6,
+          params: { scroll: 30, glow: 0.5 },
+          mask: { kind: 'band', thickness: 4, origin: 'top' },
+          delay: 120,
+        },
+        { effect: 'rain', enabled: false },
+      ],
+    };
+    const restored = value(deserializeProject(serializeProject(original)));
+    expect(restored.cellEffects).toEqual(original.cellEffects);
+    // `enabled: true` is the default, so it is normalised away on save.
+    const explicit: Document = {
+      ...sampleDocument(),
+      cellEffects: [{ effect: 'rain', enabled: true }],
+    };
+    expect(value(deserializeProject(serializeProject(explicit))).cellEffects).toEqual([
+      { effect: 'rain' },
+    ]);
+  });
+
+  it('repairs malformed cell-effect entries instead of feeding them to the renderer', () => {
+    const base = createDocument();
+    const raw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+    raw.cellEffects = [
+      { effect: 'rain', intensity: 4, params: { speed: 'fast', trail: 0.5 } },
+      { effect: '' },
+      { effect: 'glitch', mask: { kind: 'wormhole', x: 1 } },
+      'not an object',
+      { effect: 'unknown-effect-id' },
+    ];
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.cellEffects).toHaveLength(3);
+    const [rain, glitch, unknown] = restored.cellEffects;
+    expect(rain.intensity).toBe(1); // clamped into range
+    expect(rain.params).toEqual({ trail: 0.5 }); // non-numeric dropped
+    expect(glitch.mask).toBeUndefined(); // unknown mask kind discarded
+    expect(unknown.effect).toBe('unknown-effect-id'); // kept: stays unbound
+  });
+
+  it('defaults cellEffects to an empty stack on legacy documents', () => {
+    const base = createDocument();
+    const legacy: Record<string, unknown> = { ...base };
+    delete legacy.cellEffects;
+    const restored = value(deserializeProject(JSON.stringify(legacy)));
+    expect(restored.cellEffects).toEqual([]);
+  });
+
   it('migrates a schema version 1 document and fills editor and guides', () => {
     const base = createDocument();
     const legacy: Record<string, unknown> = { ...base, schemaVersion: 1 };
