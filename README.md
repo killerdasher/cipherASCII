@@ -78,6 +78,8 @@ npm run dist:linux     # Linux AppImage
 npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 ```
 
+## Features
+
 - **82 character sets / 3,011 unique characters** (48 of them with 16+ levels)
 - **52 dither algorithms** (error diffusion, ordered, blue-noise, halftone, pattern, edge)
 - **20 raster effects** in an ordered, per-layer pipeline (bloom, diffraction
