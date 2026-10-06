@@ -35,6 +35,23 @@ html, body, #root {
   line-height: 1.5;
 }
 
+/* The whole app eases in on first paint instead of popping. Kept short so it
+   never delays interaction, and neutralised under reduced-motion. */
+@keyframes app-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#root {
+  animation: app-in 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root {
+    animation: none;
+  }
+}
+
 .app {
   display: flex;
   flex-direction: column;

@@ -6,8 +6,10 @@
  * Emits into `public/`:
  *   - icon-16/32/48/64/128/256/512/1024.png  (favicon, Linux, electron-builder)
  *   - icon.png                               (512, electron-builder win/linux default)
+ *   - favicon.ico                            (browsers' default /favicon.ico probe)
  *   - icon.ico                               (Windows installer + taskbar)
  *   - icon.icns                              (macOS app bundle)
+ *   - apple-touch-icon.png                   (180, opaque - iOS masks it itself)
  *
  * The artwork is the same "data brackets + eye + rune pupil" mark the app
  * renders in `src/components/CipherAsciiLogo.tsx`, drawn here with fixed brand
@@ -35,15 +37,17 @@ const BRAND = {
 
 const SIZES = [16, 32, 48, 64, 128, 256, 512, 1024];
 
-/** One icon, drawn at `size` pixels square. */
-function drawIcon(size) {
+/** One icon, drawn at `size` pixels square. `opaque` fills the whole square
+ * edge to edge (iOS applies its own mask, and the touch icon must not have
+ * transparent corners). */
+function drawIcon(size, { opaque = false } = {}) {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   const u = size / 1024; // design units (1024 master)
 
   // Rounded-square plate (macOS/Windows squircle feel) + hairline frame.
-  const pad = 40 * u;
-  const r = 210 * u;
+  const pad = opaque ? 0 : 40 * u;
+  const r = opaque ? 0 : 210 * u;
   const plate = (inset, radius) => {
     const x = pad + inset;
     const y = pad + inset;
@@ -64,10 +68,26 @@ function drawIcon(size) {
   ctx.fillStyle = g;
   ctx.fill();
 
-  plate(26 * u, r - 26 * u);
-  ctx.lineWidth = 6 * u;
-  ctx.strokeStyle = BRAND.accent;
-  ctx.stroke();
+  // Top sheen: a faint highlight arc that gives the plate depth at 64px+ and
+  // is skipped at favicon sizes where it would only muddy the mark.
+  if (size >= 64 && !opaque) {
+    plate(0, r);
+    ctx.save();
+    ctx.clip();
+    const sheen = ctx.createLinearGradient(0, 0, 0, size * 0.55);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.07)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, size, size * 0.55);
+    ctx.restore();
+  }
+
+  if (!opaque) {
+    plate(26 * u, r - 26 * u);
+    ctx.lineWidth = 6 * u;
+    ctx.strokeStyle = BRAND.accent;
+    ctx.stroke();
+  }
 
   // The mark, laid out on the SVG's 64-unit grid, scaled into the plate.
   const s = size / 64;
@@ -75,6 +95,14 @@ function drawIcon(size) {
   const oy = 0;
   const X = (v) => ox + v * s;
   const Y = (v) => oy + v * s;
+
+  // Soft drop shadow under the mark at 64px+ so it lifts off the plate.
+  if (size >= 64) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 10 * u;
+    ctx.shadowOffsetY = 5 * u;
+  }
 
   // data brackets
   ctx.strokeStyle = BRAND.accent;
@@ -147,6 +175,8 @@ function drawIcon(size) {
   ctx.beginPath();
   ctx.arc(X(29), Y(29), 1.6 * s, 0, Math.PI * 2);
   ctx.fill();
+
+  if (size >= 64) ctx.restore();
 
   return canvas;
 }
@@ -223,9 +253,14 @@ const icns = packIcns([
 ]);
 writeFileSync(join(OUT, 'icon.icns'), icns);
 
-  const ico = packIco([16, 32, 48, 64, 128, 256].map((size) => [size, bySize.get(size)]));
+const ico = packIco([16, 32, 48, 64, 128, 256].map((size) => [size, bySize.get(size)]));
 writeFileSync(join(OUT, 'icon.ico'), ico);
+// Browsers probe /favicon.ico regardless of the <link rel="icon"> hints.
+writeFileSync(join(OUT, 'favicon.ico'), ico);
+
+const touch = png(drawIcon(180, { opaque: true }));
+writeFileSync(join(OUT, 'apple-touch-icon.png'), touch);
 
 console.log(
-  `icons: ${SIZES.join('/')} px, icon.icns (${icns.length} B), icon.ico (${ico.length} B)`,
+  `icons: ${SIZES.join('/')} px, icon.icns (${icns.length} B), icon.ico (${ico.length} B), favicon.ico, apple-touch-icon (180)`,
 );

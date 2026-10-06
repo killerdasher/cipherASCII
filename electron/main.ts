@@ -39,6 +39,9 @@ function createWindow() {
       sandbox: false,
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // Match the renderer's root background so the window never composites a
+    // white plate before the first paint (works together with show:false).
+    backgroundColor: '#0c0c10',
     show: false,
   });
 

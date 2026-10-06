@@ -50,15 +50,20 @@ every pipeline stage runs and is tested in plain Node.
 
 ## Downloading
 
-Prebuilt installers are attached to every tagged release
-([Releases](https://github.com/killerdasher/cipherASCII/releases)) and built by
-the [release workflow](.github/workflows/release.yml) on all three platforms:
+**No terminal needed.** Download the installer for your OS from
+[Releases](https://github.com/killerdasher/cipherASCII/releases), double-click
+it, click through the wizard, and launch from the desktop shortcut - the app
+runs entirely offline and never executes shell commands.
 
 | Platform | Artifact | Notes |
 | --- | --- | --- |
-| macOS | `cipherASCII-<version>-mac-x64.dmg`, `…-mac-arm64.dmg` (plus `.zip`) | Intel and Apple Silicon; unsigned build - on first open use *Right click → Open* |
-| Windows | `cipherASCII-<version>-win-x64.exe` (NSIS installer) | Per-user install, desktop + Start menu shortcuts |
+| Windows | `cipherASCII-<version>-win-x64.exe` (NSIS installer) | Double-click → Next → done: per-user install, desktop + Start menu shortcuts |
+| macOS | `cipherASCII-<version>-mac-x64.dmg`, `…-mac-arm64.dmg` (plus `.zip`) | Open the dmg, drag to Applications; unsigned build - on first launch use *Right click → Open* |
 | Linux | `cipherASCII-<version>-linux-x86_64.AppImage` | `chmod +x` and run |
+
+Installers are built by the [release workflow](.github/workflows/release.yml)
+on macOS, Windows and Ubuntu for every `v*` tag and attached to the release
+page above.
 
 Every artifact is reproducible from a clean checkout with `npm run dist:mac`,
 `npm run dist:win` or `npm run dist:linux`.
