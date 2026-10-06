@@ -107,7 +107,12 @@ UI event
 ### Hygiene
 
 13. `App.tsx:424` allocates a fresh `{x:0,y:0}` literal per render.
+    (resolved: it is the module-level `ORIGIN_CURSOR`, `App.tsx:54`.)
 14. `EffectsPanel.tsx:14-37` rebuilds `effectsByCategory` on every render.
+    (resolved: both lists are module-scope and derived from `EFFECT_PRESETS`,
+    which also ends the hard-coded copy drifting from the registry - the
+    panel's hand-written category for `chromaticAberration` said `glitch`,
+    the registry says `color`.)
 15. **Duplicated types**: `EffectId`/`EffectMeta`/`EffectSettings`/
     `EffectsPipeline` exist in both `types.ts:650-689` and `pipeline.ts:12-47`;
     `Theme`/`ThemeColors` in both `types.ts:774-840` and `theme.ts:8-88`.
@@ -116,6 +121,8 @@ UI event
 16. `ProceduralRenderRequest` is in the request union (`types.ts:599-604`) but
     the worker has no `kind:'procedural'` branch — it would silently fall
     through (`render.worker.ts:39,59,79`).
+    (resolved: the branch exists and answers `unsupported` instead of leaving
+    the caller's promise pending, the same failure mode `decode` had.)
 
 ---
 

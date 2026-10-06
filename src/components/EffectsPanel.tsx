@@ -3,7 +3,25 @@ import { useStore, useStoreShallow, selectEffectsPipeline, selectCellEffects, se
 import type { EffectSettings, EffectId } from '../core/types';
 import type { CellEffectEntry } from '../core/fx/pipeline';
 import { effectsByCategory as cellEffectsByCategory, getCellEffect } from '../core/fx';
+import { EFFECT_PRESETS } from '../core/effects/pipeline';
 import { Slider } from './Slider';
+
+/**
+ * Raster effects offered in the pipeline, grouped by category.
+ *
+ * Derived from `EFFECT_PRESETS` - the registry is the single source of truth,
+ * so a new preset shows up here without touching the panel (and the panel no
+ * longer rebuilds two arrays on every render).
+ */
+const availableEffects: { id: EffectId; category: string }[] = EFFECT_PRESETS.map((preset) => ({
+  id: preset.id,
+  category: preset.category,
+}));
+
+const effectsByCategory: Record<string, EffectId[]> = availableEffects.reduce((acc, effect) => {
+  (acc[effect.category] ??= []).push(effect.id);
+  return acc;
+}, {} as Record<string, EffectId[]>);
 
 function EffectsPanelInner() {
   const { effectsPipeline, removeEffect, reorderEffects, resetEffectsPipeline, cellEffects, fxSeed } =
@@ -15,35 +33,6 @@ function EffectsPanelInner() {
       cellEffects: selectCellEffects(s),
       fxSeed: selectFxSeed(s),
     }));
-
-  const availableEffects: { id: EffectId; category: string }[] = [
-    { id: 'epsilonGlow', category: 'glow' },
-    { id: 'jpegGlitch', category: 'glitch' },
-    { id: 'chromaticAberration', category: 'glitch' },
-    { id: 'scanlines', category: 'texture' },
-    { id: 'vignette', category: 'style' },
-    { id: 'filmGrain', category: 'texture' },
-    { id: 'bloom', category: 'glow' },
-    { id: 'diffractionStars', category: 'glow' },
-    { id: 'crtCurvature', category: 'distortion' },
-    { id: 'colorShift', category: 'color' },
-    { id: 'paletteShift', category: 'color' },
-    { id: 'ditherOverlay', category: 'texture' },
-    { id: 'edgeEnhance', category: 'style' },
-    { id: 'sharpen', category: 'style' },
-    { id: 'blur', category: 'blur' },
-    { id: 'noise', category: 'texture' },
-    { id: 'halftoneOverlay', category: 'texture' },
-    { id: 'medianFilter', category: 'blur' },
-    { id: 'motionBlur', category: 'blur' },
-    { id: 'lensDistortion', category: 'distortion' },
-  ];
-
-  const effectsByCategory = availableEffects.reduce((acc, effect) => {
-    if (!acc[effect.category]) acc[effect.category] = [];
-    acc[effect.category].push(effect.id);
-    return acc;
-  }, {} as Record<string, EffectId[]>);
 
   const moveEffect = (index: number, direction: number) => {
     const newIndex = index + direction;

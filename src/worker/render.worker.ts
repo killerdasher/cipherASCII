@@ -5,7 +5,12 @@
  * Uses generation IDs to discard stale results when settings change mid-flight.
  */
 
-import { type RenderResult, type ImageRenderRequest, type TextRenderRequest } from '../core/types';
+import {
+  type RenderResult,
+  type ImageRenderRequest,
+  type TextRenderRequest,
+  type ProceduralRenderRequest,
+} from '../core/types';
 import {
   renderImageToGrid,
   prepareSampledRaster,
@@ -17,7 +22,11 @@ import { applyEffectsToRaster } from '../core/effects/pipeline';
 import { type Raster } from '../core/types';
 import { dataUrlToRaster } from './raster-decode';
 
-type WorkerRequest = (ImageRenderRequest & { generationId?: number }) | (TextRenderRequest & { generationId?: number }) | { kind: 'decode'; jobId: number; dataUrl: string; generationId: number };
+type WorkerRequest =
+  | (ImageRenderRequest & { generationId?: number })
+  | (TextRenderRequest & { generationId?: number })
+  | (ProceduralRenderRequest & { generationId?: number })
+  | { kind: 'decode'; jobId: number; dataUrl: string; generationId: number };
 
 let currentGeneration = 0;
 
@@ -97,6 +106,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
       postProgress(jobId, 'done', 1);
       postResult(jobId, result);
+    } else if (msg.kind === 'procedural') {
+      // The request type exists, but no client sends it yet: answer instead of
+      // letting the caller's promise hang (the fate of `decode` before it got
+      // its own branch).
+      postError(
+        jobId,
+        'unsupported',
+        'Procedural render requests are not handled by the worker',
+      );
     } else if (msg.kind === 'text') {
       postProgress(jobId, 'render', 0.2);
       const grid = renderTextToGrid(msg.text, msg.settings);
