@@ -103,6 +103,9 @@ UI event
 
 12. **Wasted progress traffic** — the worker posts `progress` for every render
     (`render.worker.ts:60-91`) but `App.tsx:143` never passes `onProgress`.
+    (resolved: the app forwards it to the status bar as
+    `Rendering: <stage> <n>%` and clears it when the render settles, leaving
+    unrelated status messages alone.)
 
 ### Hygiene
 

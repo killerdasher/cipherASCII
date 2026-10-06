@@ -50,6 +50,31 @@ const RIGHT_TABS: Array<{ id: RightPanelId; label: string }> = [
  */
 const RENDER_DEBOUNCE_MS = 60;
 
+/**
+ * Worker progress -> status bar. The worker already posts stage/progress for
+ * every image render; the app used to drop it (ARCHITECTURE_AUDIT item 12).
+ * Messages carry the prefix so a completed render only clears its own text
+ * instead of stomping on a save/import message that landed in between.
+ */
+const RENDER_STATUS_PREFIX = 'Rendering';
+const RENDER_STAGE_LABELS: Record<string, string> = {
+  decode: 'decoding',
+  effects: 'effects',
+  render: 'rasterising',
+  done: 'finishing',
+};
+
+function renderProgress(stage: string, progress: number): void {
+  const label = RENDER_STAGE_LABELS[stage] ?? stage;
+  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  useStore.getState().setStatusMessage(`${RENDER_STATUS_PREFIX}: ${label} ${pct}%`);
+}
+
+function clearRenderProgress(): void {
+  const { statusMessage, setStatusMessage } = useStore.getState();
+  if (statusMessage.startsWith(RENDER_STATUS_PREFIX)) setStatusMessage('Ready');
+}
+
 /** Stable value for the status bar's cursor readout (a fresh literal per render defeats memo). */
 const ORIGIN_CURSOR = { x: 0, y: 0 };
 
@@ -154,21 +179,31 @@ const {
     if (!activeLayer) return;
     const generationAtStart = renderGeneration;
     const isCurrent = () => useStore.getState().renderGeneration === generationAtStart;
+    const onProgress = (stage: string, progress: number) => {
+      if (isCurrent()) renderProgress(stage, progress);
+    };
 
     const doRender = async () => {
       const { imageSettings, textSettings } = doc;
       const effectsPipeline = useStore.getState().effectsPipeline;
       try {
         if (activeLayer.kind === 'image' && activeLayer.source) {
-          const result = await renderImage(activeLayer.source.dataUrl, imageSettings, effectsPipeline);
+          const result = await renderImage(
+            activeLayer.source.dataUrl,
+            imageSettings,
+            effectsPipeline,
+            onProgress,
+          );
           if (!isCurrent()) return;
           applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
           setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
+          clearRenderProgress();
         } else if (activeLayer.kind === 'text') {
-          const result = await renderText(activeLayer.text, textSettings);
+          const result = await renderText(activeLayer.text, textSettings, onProgress);
           if (!isCurrent()) return;
           applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
           setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
+          clearRenderProgress();
         }
       } catch (e) {
         // Superseded renders are expected during fast input, not failures.
@@ -176,7 +211,10 @@ const {
         console.error('Render failed:', e);
         setStatusMessage(`Render error: ${e instanceof Error ? e.message : 'unknown'}`);
       } finally {
-        if (isCurrent()) setPendingRender(false);
+        if (isCurrent()) {
+          setPendingRender(false);
+          clearRenderProgress();
+        }
       }
     };
 

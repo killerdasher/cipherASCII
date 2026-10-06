@@ -100,7 +100,7 @@ Implemented and covered by the test suite:
 | Branding: cipherASCII logo, About dialog and Settings credit | working |
 | Export: TXT / ASC / ANSI / JSON / HTML / SVG / AAP / **PNG** / **MP4** / **GIF** | working |
 | Video export: every timeline frame rasterised and encoded with **ffmpeg.wasm** (H.264 MP4, single-pass palette GIF), progress bar in the Export panel | working |
-| Worker rendering with generation IDs (stale results are dropped) | working |
+| Worker rendering with generation IDs (stale results are dropped) + stage progress in the status bar | working |
 | Stale-render settlement (`StaleRenderError`) + 60 ms render debounce | working |
 | Cell-effect engine: 45 effects, masks, pipeline, seeded determinism | working |
 | Live cell-effect playback in the editor (self-stopping rAF loop) | working |
