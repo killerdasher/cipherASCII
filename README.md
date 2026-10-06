@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-780%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-788%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -22,7 +22,9 @@ every pipeline stage runs and is tested in plain Node.
 - **52 dither algorithms** (error diffusion, ordered, blue-noise, halftone, pattern, edge)
 - **20 raster effects** in an ordered, per-layer pipeline (bloom, diffraction
   stars, CRT curvature, chromatic aberration, scanlines, film grain, glitch,
-  sharpen, blur, median, motion blur, ...) applied in the worker
+  sharpen, blur, median, motion blur, ...) applied in the worker — at source
+  resolution, or on the downscaled grid for a ~1000× cheaper render
+  (`effectSpace`, Settings → Image Settings)
 - **45 cell effects** that animate the *characters* after they exist — five
   signature originals (**Cipherlock**, **Hexfall**, **Glyphwave**,
   **Signalburst**, **Keyshift**) plus reveal, motion, energy, destruction and
@@ -108,6 +110,7 @@ Implemented and covered by the test suite:
 | Command palette (Ctrl+K) with tested ranking + registry-driven sections | working |
 | Quality modes + adaptive controller + debug overlay (Settings > Performance) | working |
 | Visual-golden fixtures (banner, blue-noise render, signature fx) + determinism | working |
+| Effect space: raster effects at source resolution **or** on the downscaled grid (Settings → Image Settings) | working |
 | Glyph/compositor/colour review: overflow, allocation-free ordering, ANSI-256 fix | working |
 | Benchmarks: `npm run bench` and `npm run bench:engines` with published numbers | working |
 | Drag-and-drop import of PNG, JPEG, WEBP, BMP, GIF (auto-sized grid) | working |
@@ -228,7 +231,7 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 780 tests / 38 files, ~8 s
+npm test                          # 788 tests / 39 files, ~8 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios

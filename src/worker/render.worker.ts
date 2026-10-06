@@ -6,7 +6,12 @@
  */
 
 import { type RenderResult, type ImageRenderRequest, type TextRenderRequest } from '../core/types';
-import { renderImageToGrid, CancelledRender } from '../core/renderImage';
+import {
+  renderImageToGrid,
+  prepareSampledRaster,
+  rasterToGrid,
+  CancelledRender,
+} from '../core/renderImage';
 import { renderTextToGrid } from '../core/text/render';
 import { applyEffectsToRaster } from '../core/effects/pipeline';
 import { type Raster } from '../core/types';
@@ -67,13 +72,29 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         postError(jobId, 'invalid-input', 'No source image provided');
         return;
       }
-      if (msg.effects && msg.effects.effects.length > 0) {
+      const opts = { shouldCancel: () => shouldCancel(currentGeneration) };
+      const effects = msg.effects && msg.effects.effects.length > 0 ? msg.effects : null;
+      let result: RenderResult;
+      if (effects && (msg.settings.effectSpace ?? 'source') === 'grid') {
+        // Effects between resize and preprocessing: the stack runs on the
+        // downscaled raster instead of the full-resolution source (see
+        // docs/PERFORMANCE.md §6 - this is orders of magnitude cheaper and
+        // puts scanlines/grain on cell boundaries).
         postProgress(jobId, 'effects', 0.2);
-        raster = await applyEffectsToRaster(raster, msg.effects);
+        const stage = prepareSampledRaster(raster, msg.settings, opts);
+        const effected = await applyEffectsToRaster(stage.sampled, effects);
         if (shouldCancel(currentGeneration)) return;
+        postProgress(jobId, 'render', 0.3);
+        result = rasterToGrid(effected, { ...stage, sampled: effected }, msg.settings, opts);
+      } else {
+        if (effects) {
+          postProgress(jobId, 'effects', 0.2);
+          raster = await applyEffectsToRaster(raster, effects);
+          if (shouldCancel(currentGeneration)) return;
+        }
+        postProgress(jobId, 'render', 0.3);
+        result = renderImageToGrid(raster, msg.settings, opts);
       }
-      postProgress(jobId, 'render', 0.3);
-      const result = renderImageToGrid(raster, msg.settings, { shouldCancel: () => shouldCancel(currentGeneration) });
       postProgress(jobId, 'done', 1);
       postResult(jobId, result);
     } else if (msg.kind === 'text') {

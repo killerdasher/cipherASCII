@@ -1,9 +1,13 @@
 /**
  * Image -> ASCII rendering pipeline.
  *
- *   crop -> resize (per render-mode geometry) -> preprocess -> luminance
- *   -> mapping strategy -> dither -> glyph selection -> colour sampling
- *   -> AsciiGrid
+ *   crop -> resize (per render-mode geometry) -> [effects] -> preprocess
+ *   -> luminance -> mapping strategy -> dither -> glyph selection
+ *   -> colour sampling -> AsciiGrid
+ *
+ * The `[effects]` slot is where `effectSpace: 'grid'` inserts the raster
+ * effect stack; the default (`'source'`) runs it on the full-resolution image
+ * before `prepareSampledRaster` instead.
  *
  * The pipeline is pure and synchronous; the application runs it inside a
  * worker with generation checks so the UI never shows stale results.
@@ -192,11 +196,37 @@ export interface RenderImageOptions {
   targetRows?: number;
 }
 
+
+/**
+ * Full pipeline: crop -> geometry -> fit -> resize -> preprocess -> luminance
+ * -> mapping -> dither -> colour sampling -> glyph selection.
+ *
+ * Equivalent to {@link prepareSampledRaster} followed by {@link rasterToGrid};
+ * the split exists so the worker can run raster effects between the two.
+ */
 export function renderImageToGrid(
   source: Raster,
   settings: ImageRenderSettings,
   options: RenderImageOptions = {},
 ): RenderResult {
+  return rasterToGrid(source, prepareSampledRaster(source, settings, options), settings, options);
+}
+
+export interface SampledStage {
+  /** Cropped, fitted and downscaled RGBA raster at render resolution. */
+  sampled: Raster;
+  geo: Geometry;
+  cols: number;
+  rows: number;
+  /** Pipeline entry time, so `stats.durationMs` spans both stages. */
+  startedAt: number;
+}
+
+export function prepareSampledRaster(
+  source: Raster,
+  settings: ImageRenderSettings,
+  options: RenderImageOptions = {},
+): SampledStage {
   const started = Date.now();
   const cancel = options.shouldCancel;
   check(cancel);
@@ -250,6 +280,26 @@ export function renderImageToGrid(
   // --- resize -------------------------------------------------------------
   const clipped = cropRegion(source, region);
   const sampled = resizeRaster(clipped, geo.sampleW, geo.sampleH, settings.resizeFilter);
+  check(cancel);
+
+  return { sampled, geo, cols, rows, startedAt: started };
+}
+
+
+/**
+ * Stage 2 of the pipeline: preprocess -> luminance -> mapping -> dither ->
+ * colour sampling -> glyph selection. Runs on the downscaled raster, which is
+ * also where `effectSpace: 'grid'` inserts the raster effect stack.
+ */
+export function rasterToGrid(
+  source: Raster,
+  stage: SampledStage,
+  settings: ImageRenderSettings,
+  options: RenderImageOptions = {},
+): RenderResult {
+  const started = stage.startedAt;
+  const cancel = options.shouldCancel;
+  const { sampled, geo, cols, rows } = stage;
   check(cancel);
 
   // --- preprocess ---------------------------------------------------------

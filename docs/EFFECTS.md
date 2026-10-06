@@ -212,6 +212,21 @@ parameters and rejects unknown mask kinds — a hand-edited project can never
 feed a malformed mask into the render loop. Unknown effect ids are kept and
 simply stay unbound.
 
+
+### Effect space
+
+`ImageRenderSettings.effectSpace` decides *where* the stack runs (see
+`src/worker/render.worker.ts`):
+
+| value | stage | cost |
+| --- | --- | --- |
+| `'source'` (default) | full-resolution image, before the downscale | proportional to source pixels (~8 s for a 12 Mpx photo) |
+| `'grid'` | after `resizeRaster`, before `applyPreprocess` | proportional to grid samples (~10⁴ pixels at 100 columns) |
+
+The grid path is assembled from `prepareSampledRaster` + `rasterToGrid` in
+`src/core/renderImage.ts`; `renderImageToGrid` is the two composed and stays
+byte-identical to them. Behaviour and coverage: `tests/unit/effectSpace.test.ts`.
+
 ## 7. Adding an effect
 
 ```ts

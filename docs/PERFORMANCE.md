@@ -150,14 +150,24 @@ and `needsFrames` becomes false) — asserted in `tests/unit/fxRuntime.test.ts`
 These are real and documented rather than papered over (they come from
 `docs/ARCHITECTURE_AUDIT.md`). Three of the five are now closed:
 
-1. **Raster effects run at source resolution** (`render.worker.ts`) before the
-   downscale to columns — a 4000×3000 photo is blurred at full res to produce
-   ~100 columns. Moving the stack after the downscale is the single biggest
-   render win left. `npm run bench:engines` quantifies it: the six-effect
-   stack runs at a flat **1.4–1.5 Mpx/s** regardless of size (512² ≈ 168 ms,
-   1024² ≈ 607 ms, 2048² ≈ 2781 ms), so a 12 Mpx photo costs **~8 s** per
-   render. `blur` (43 ms) and `bloom` (57 ms) dominate at 512²; the rest are
-   single-digit to ~17 ms.
+1. **Raster effects run at source resolution by default** (`render.worker.ts`)
+   before the downscale to columns — a 4000×3000 photo is blurred at full res
+   to produce ~100 columns. `npm run bench:engines` quantifies it: the
+   six-effect stack runs at a flat **1.4–1.5 Mpx/s** regardless of size (512²
+   ≈ 168 ms, 1024² ≈ 607 ms, 2048² ≈ 2781 ms), so a 12 Mpx photo costs
+   **~8 s** per render. `blur` (43 ms) and `bloom` (57 ms) dominate at 512²;
+   the rest are single-digit to ~17 ms.
+
+   **Escape hatch (Settings → Image Settings → Effects):** `effectSpace:
+   'grid'` runs the same stack between resize and preprocessing, on the
+   downscaled raster the rest of the pipeline already works on. That takes the
+   effect cost from source pixels to grid pixels (a 100-column render samples
+   ~10⁴ pixels instead of 10⁷) and lets high-frequency effects (scanlines,
+   grain) land on cell boundaries instead of being averaged away by the
+   downscale. Spatial effects read stronger at grid scale because their radii
+   are now measured in cells, not source pixels — so `'source'` stays the
+   default and presets keep their current look. Both paths are covered in
+   `tests/unit/effectSpace.test.ts`.
 2. ~~**N+1 RGBA copies in the raster effect pipeline**~~ — closed. The stack
    now ping-pongs between two pre-allocated frames (`applyEffectsToRaster`),
    so N effects cost two allocations instead of N+1 while keeping the copy

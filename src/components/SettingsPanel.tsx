@@ -72,6 +72,16 @@ function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: Set
         </select>
       </div>
       <div className="prop-row">
+        <label title="Where raster effects (blur, bloom, scanlines...) run: on the full-resolution source image, or on the downscaled grid (orders of magnitude faster, effects land on cell boundaries)">Effects:</label>
+        <select
+          value={imageSettings.effectSpace ?? 'source'}
+          onChange={(e) => setImageSettings({ effectSpace: e.target.value as 'source' | 'grid' })}
+        >
+          <option value="source">Source image (accurate)</option>
+          <option value="grid">Cell grid (fast)</option>
+        </select>
+      </div>
+      <div className="prop-row">
         <label>Invert:</label>
         <input type="checkbox" checked={imageSettings.output.invert} onChange={(e) => setImageSettings({ output: { ...imageSettings.output, invert: e.target.checked } })} />
       </div>

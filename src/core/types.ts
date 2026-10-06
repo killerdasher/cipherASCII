@@ -213,6 +213,19 @@ export interface MappingOutputSettings {
   invert: boolean;
 }
 
+/**
+ * Where the raster effect stack runs.
+ *
+ * `source` applies effects to the full-resolution image before the downscale
+ * (pixel-accurate, but a 12 Mpx photo costs seconds - see docs/PERFORMANCE.md
+ * §6). `grid` applies them to the downscaled raster, between resize and
+ * preprocessing, which is where the rest of the pipeline already operates:
+ * roughly three orders of magnitude less work, and high-frequency effects
+ * (scanlines, grain) land on cell boundaries instead of being averaged away
+ * by the downscale.
+ */
+export type EffectSpace = 'source' | 'grid';
+
 export interface ImageRenderSettings {
   /** Output width in cells (columns). */
   columns: number;
@@ -230,6 +243,8 @@ export interface ImageRenderSettings {
   dither: DitherSettings;
   output: MappingOutputSettings;
   colorMode: ColorMode;
+  /** See {@link EffectSpace}. Older projects load with the default. */
+  effectSpace: EffectSpace;
 }
 
 export const DEFAULT_IMAGE_RENDER: ImageRenderSettings = {
@@ -252,6 +267,7 @@ export const DEFAULT_IMAGE_RENDER: ImageRenderSettings = {
   dither: { algorithm: 'none', strength: 1, serpentine: false, matrixSize: 8 },
   output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false },
   colorMode: 'sample',
+  effectSpace: 'source',
 };
 
 // ---------------------------------------------------------------------------
