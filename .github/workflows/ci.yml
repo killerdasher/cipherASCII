@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    name: typecheck + lint + tests + demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Signature demo (golden frames)
+        run: npm run demo
+
+      - name: Engine benchmarks
+        run: npm run bench:engines
+
+      - name: Production bundle
+        run: npm run build
+
+      - name: Electron compile
+        run: npm run build:electron

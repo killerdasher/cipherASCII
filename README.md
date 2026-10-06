@@ -1,5 +1,10 @@
 # cipherASCII
 
+[![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-707%20passing-brightgreen)](#verification)
+[![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > Previously **ASCII Art Studio** - the same product, published as
 > **cipherASCII**. Created by [killerdasher](https://github.com/killerdasher).
 
@@ -15,9 +20,23 @@ every pipeline stage runs and is tested in plain Node.
 
 - **82 character sets / 3,011 unique characters** (48 of them with 16+ levels)
 - **52 dither algorithms** (error diffusion, ordered, blue-noise, halftone, pattern, edge)
-- **20 effects** in an ordered, per-layer pipeline (bloom, diffraction stars,
-  CRT curvature, chromatic aberration, scanlines, film grain, glitch, sharpen,
-  blur, median, motion blur, ...)
+- **20 raster effects** in an ordered, per-layer pipeline (bloom, diffraction
+  stars, CRT curvature, chromatic aberration, scanlines, film grain, glitch,
+  sharpen, blur, median, motion blur, ...) applied in the worker
+- **45 cell effects** that animate the *characters* after they exist — five
+  signature originals (**Cipherlock**, **Hexfall**, **Glyphwave**,
+  **Signalburst**, **Keyshift**) plus reveal, motion, energy, destruction and
+  atmosphere families, each with typed parameter sliders, per-effect masks,
+  intensity, delay and a reproducible **seed** (`docs/EFFECTS.md`)
+- **Live cell-effect runtime**: one `requestAnimationFrame` loop in the editor
+  that stops itself the moment every one-shot effect settles — an idle canvas
+  costs nothing (`docs/RENDERING.md`)
+- **Animation core**: 26 easings, frame-time tweens with delay/repeat/pingPong
+  and seam-free sequencing, motion paths with arc-length parameterisation, and
+  a scene system with triggers and transition handover (`docs/ANIMATION.md`)
+- **Layered rendering**: interned glyphs, structure-of-arrays planes, a
+  z-ordered compositor with blend modes and standard alpha, and a dirty-region
+  diff that picks `none`/`diff`/`full` per frame
 - **9 tone-mapping strategies** (luminance, brightness, contrast, local contrast, edge, ...)
 - **10 export formats**: TXT, ASC, ANSI, JSON, HTML, SVG, AAP, PNG, **MP4**, **GIF**
 - **10 themes**: Medieval, Dither Boy, Terminal Green, Terminal Amber, Light,
@@ -75,6 +94,13 @@ Implemented and covered by the test suite:
 | Export: TXT / ASC / ANSI / JSON / HTML / SVG / AAP / **PNG** / **MP4** / **GIF** | working |
 | Video export: every timeline frame rasterised and encoded with **ffmpeg.wasm** (H.264 MP4, single-pass palette GIF), progress bar in the Export panel | working |
 | Worker rendering with generation IDs (stale results are dropped) | working |
+| Stale-render settlement (`StaleRenderError`) + 60 ms render debounce | working |
+| Cell-effect engine: 45 effects, masks, pipeline, seeded determinism | working |
+| Live cell-effect playback in the editor (self-stopping rAF loop) | working |
+| Layered canvas core: glyph interning, planes, compositor, dirty diff | working |
+| Animation core: 26 easings, tweens, sequences, motion paths, scenes | working |
+| Signature demo + golden-frame visual regression (`npm run demo`) | working |
+| Benchmarks: `npm run bench` and `npm run bench:engines` with published numbers | working |
 | Drag-and-drop import of PNG, JPEG, WEBP, BMP, GIF (auto-sized grid) | working |
 | Electron packaging (NSIS installer, desktop shortcut) | working |
 
@@ -126,6 +152,8 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 | `npm run test:coverage` | Coverage over `src/core/**` |
 | `npm run fuzz` | Property tests only (`tests/fuzz`) |
 | `npm run bench` | Render / text / dither throughput tables |
+| `npm run bench:engines` | Cell effects, bridge, compositor/diff, tween and stroke ratios |
+| `npm run demo` | Signature animation demo; `DEMO_SEED=7` / `NO_COLOR=1` / `UPDATE_GOLDEN=1` |
 | `npm run simulations` | Dither fidelity, palette recovery, generation protocol, charset stats |
 | `npm run build:electron` | Compile `electron/main.ts` |
 | `npm run electron:dev` | Desktop app in dev mode |
@@ -133,7 +161,7 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 | `npm run electron:pack` | Unpacked executable only |
 | `npm run electron:preview` | Run the compiled Electron shell against `dist/` |
 
-`bench` and `simulations` run through Vitest (`vitest.scripts.config.ts`)
+`bench`, `bench:engines`, `simulations` and `demo` run through Vitest (`vitest.scripts.config.ts`)
 because the project uses extensionless TypeScript imports, which plain
 `node --experimental-strip-types` cannot resolve.
 
@@ -155,16 +183,24 @@ because the project uses extensionless TypeScript imports, which plain
 ```
 electron/            Electron main process, window, smoke-test probes
 src/core/            Pure rendering core - never imports UI code
+  canvas/            Glyph interning, planes, compositor, dirty diff, virtual canvas
+  animation/         26 easings, tweens, sequences, animator
+  motion/            Path sampling (arc length) + body physics
+  scene/             Scene timeline, triggers, scene director
+  particles/         Pooled particle system (no per-frame allocation)
+  fx/                45 cell effects, mask compiler, pipeline, runtime bridge
   charsets/          82 character sets, 3,011 unique characters
   dither.ts          52 dither algorithms
   mapping.ts         9 tone-mapping strategies + charset presets
-  effects/           19-effect pipeline
+  effects/           20-effect raster pipeline
   text/              Bitmap fonts, FIGlet, banner styles
   palette/           Palette model, extraction, import/export
   timeline/          Tracks, keyframes, interpolation, playback helpers
   export/            8 exporters behind one registry + video arg builders
-  project/           Project schema + serialization
-  theme/             6 app themes
+  project/           Project schema + serialization (incl. cell-effect stack)
+  theme/             10 app themes
+docs/                Architecture audit + rendering/animation/effects/perf guides
+scripts/             bench, simulations, engines bench, signature demo
 src/worker/          Web Worker render host (generation IDs, cancellation)
 src/services/        Renderer-side ffmpeg.wasm video export
 src/components/      React panels (left/right docks, canvas, modals)
@@ -181,17 +217,33 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # all tests pass
-npm run bench                     # benchmark tables
+npm test                          # 707 tests / 34 files, ~6 s
+npm run demo                      # signature animation demo (golden-checked)
+npm run bench                     # render / text / dither throughput tables
+npm run bench:engines             # effect, compositor, stroke ratios
 npm run simulations               # algorithm simulations
 npm run electron:build            # full package
 ```
+
+Measured numbers, with the commands that produced them, live in
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the data flow, threading model,
 command/history design and extension points (registry-based dither, effects,
 mapping strategies and exporters).
+
+Topic guides written against the current code:
+
+| Doc | Covers |
+| --- | --- |
+| [docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) | What was wrong before this pass, with `file:line` evidence |
+| [docs/RENDERING.md](docs/RENDERING.md) | Grid → worker → compositor → canvas data flow, generation guards |
+| [docs/ANIMATION.md](docs/ANIMATION.md) | Easing, tweens, sequencing, motion paths, scenes |
+| [docs/EFFECTS.md](docs/EFFECTS.md) | The 45 cell effects, masks, lifecycle, how to add one |
+| [docs/THEMES.md](docs/THEMES.md) | The ten themes, roles, CSS variable injection |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured numbers, what changed, what is still open |
 
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md).
 Usage: see [USER_GUIDE.md](USER_GUIDE.md).
