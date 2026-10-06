@@ -148,21 +148,31 @@ and `needsFrames` becomes false) — asserted in `tests/unit/fxRuntime.test.ts`
 ## 6. Known costs / still open
 
 These are real and documented rather than papered over (they come from
-`docs/ARCHITECTURE_AUDIT.md`):
+`docs/ARCHITECTURE_AUDIT.md`). Three of the five are now closed:
 
 1. **Raster effects run at source resolution** (`render.worker.ts`) before the
    downscale to columns — a 4000×3000 photo is blurred at full res to produce
    ~100 columns. Moving the stack after the downscale is the single biggest
-   render win left.
-2. **N+1 RGBA copies in the raster effect pipeline** — each effect copies the
-   frame again; a scratch-pool would remove them.
+   render win left. `npm run bench:engines` quantifies it: the six-effect
+   stack runs at a flat **1.4–1.5 Mpx/s** regardless of size (512² ≈ 168 ms,
+   1024² ≈ 607 ms, 2048² ≈ 2781 ms), so a 12 Mpx photo costs **~8 s** per
+   render. `blur` (43 ms) and `bloom` (57 ms) dominate at 512²; the rest are
+   single-digit to ~17 ms.
+2. ~~**N+1 RGBA copies in the raster effect pipeline**~~ — closed. The stack
+   now ping-pongs between two pre-allocated frames (`applyEffectsToRaster`),
+   so N effects cost two allocations instead of N+1 while keeping the copy
+   each effect needs as its input. The bench case fell **194.9 → 117.9 ms
+   (−39%)** for the same six-effect 512² stack (the rest of the gain is the
+   gaussian rewrite in `imageEffects.ts` — see `docs/EFFECTS.md` §8).
 3. **Subtexture `getImageData`/`putImageData` round-trip** on the editor paint
    path, skipped only for very large canvases.
-4. **Bundle size** — `vite build` warns that a chunk exceeds 500 kB; effect and
-   theme modules are the obvious code-splitting candidates.
-5. **`JSON.stringify` comparison** of render settings on undo/redo
-   (`store/index.ts`) — cheap per event, but a structural compare would be
-   cheaper still.
+4. ~~**Bundle size**~~ — closed. Rolldown `codeSplitting.groups` plus a lazy
+   `PixiViewport`: the app chunk went **847 → 247 kB**, pixi ships as a
+   511 kB async chunk loaded only when the viewport mounts, and the >500 kB
+   build warning is gone.
+5. ~~**`JSON.stringify` comparison** of render settings on undo/redo~~ —
+   closed: `renderSettingsChanged` uses the structural `deepEqual` in
+   `src/core/util.ts`.
 
 ## 7. Quality modes, adaptive control and the debug overlay
 

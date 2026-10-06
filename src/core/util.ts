@@ -45,6 +45,33 @@ export function stableStringify(value: unknown): string {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
 }
 
+/**
+ * Structural equality for plain settings objects: same own keys, equal values
+ * (arrays and nested objects compared recursively, regardless of key order).
+ *
+ * Used instead of `JSON.stringify(a) !== JSON.stringify(b)` on undo/redo: no
+ * string is built for objects that compare equal, and key order cannot make
+ * two equal documents look different.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+    return true;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false;
+    if (!deepEqual(left[key], right[key])) return false;
+  }
+  return true;
+}
+
 /** Deterministic PRNG (mulberry32) for procedural generators and fuzzing. */
 export class Rng {
   private state: number;

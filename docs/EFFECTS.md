@@ -242,7 +242,6 @@ automatically (the test suite iterates *every* registered effect).
 Checklist: allocation-free `apply`, writes only inside `ctx.mask`, reads source
 content from `ctx.source*`, seeds randomness through `ctx.rng`/`cellSalt`, and
 returns to the source on a one-shot so the final frame equals the document.
-
 ## 8. Tests
 
 `tests/unit/fx.test.ts` (registry integrity, masks, pipeline lifecycle,
@@ -250,3 +249,13 @@ determinism, mask isolation, every effect applies without throwing) and
 `tests/unit/fxRuntime.test.ts` (bridge round-trip, source recapture, resize
 rebinding, idle stop). `scripts/engines.bench.ts` measures per-effect frame
 cost — see `docs/PERFORMANCE.md`.
+
+The raster primitives carry equivalence tests (`tests/unit/blur.test.ts`):
+`gaussianRGBA` — shared by blur, bloom, sharpen, motionBlur and epsilonGlow —
+is pinned to a naive per-channel reference, and `boxBlurCopy` (diffraction
+stars, epsilon glow) to a naive sliding-window reference. Writing those
+references is what surfaced two addressing bugs that are now fixed: the
+gaussian vertical pass wrote to `y * 4 + x * w * 4` (a transpose, so blur
+scrambled the frame), and `boxPass`'s destination step was swapped relative to
+its source step. Both effects now match the naive references exactly at every
+tested size and radius.

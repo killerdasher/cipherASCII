@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-756%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-780%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -228,7 +228,7 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 756 tests / 37 files, ~8 s
+npm test                          # 780 tests / 38 files, ~8 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios

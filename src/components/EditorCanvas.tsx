@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useRef, useEffect, useMemo, useState } from 'react';
 import { CELL_SIZE, type AsciiGrid, type Document, type Layer } from '../core/types';
 import { composeDocument } from '../core/layer/compose';
 import { cloneGrid, getCell } from '../core/grid';
@@ -9,7 +9,9 @@ import { useStore } from '../store';
 import { cellFxRuntime } from '../core/fx';
 import { resolveBudget } from '../core/perf/quality';
 import { adaptiveFps, createAdaptive, observeFrame } from '../core/perf/adaptive';
-import { PixiViewport } from './PixiViewport';
+// Loaded only when the GPU preview is switched on: pixi.js is a ~510 kB
+// vendor chunk, and 2D editing must not pay for it up front.
+const PixiViewport = lazy(() => import('./PixiViewport').then((m) => ({ default: m.PixiViewport })));
 
 interface EditorCanvasProps {
   document: Document;
@@ -526,11 +528,13 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
           onPointerCancel={finishStroke}
         />
         {gpuPreview && (
-          <PixiViewport
-            sourceRef={canvasRef}
-            crt={crtGlow}
-            onFallback={(reason) => useStore.getState().disableGpuPreview(reason)}
-          />
+          <Suspense fallback={null}>
+            <PixiViewport
+              sourceRef={canvasRef}
+              crt={crtGlow}
+              onFallback={(reason) => useStore.getState().disableGpuPreview(reason)}
+            />
+          </Suspense>
         )}
       </div>
     </div>

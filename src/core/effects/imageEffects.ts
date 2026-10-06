@@ -123,41 +123,66 @@ function gaussianKernel(sigma: number): Float64Array {
   return kernel;
 }
 
-/** Separable Gaussian blur; returns a new RGBA buffer (alpha preserved). */
-function gaussianRGBA(src: Uint8ClampedArray, w: number, h: number, sigma: number): Uint8ClampedArray {
+/**
+ * Separable Gaussian blur; returns a new RGBA buffer (alpha preserved).
+ *
+ * Exported for `tests/unit/blur.test.ts`, which pins the optimised form to a
+ * naive reference implementation.
+ *
+ * The tap positions are gathered once per pixel instead of once per pixel per
+ * channel, and the three channels are accumulated in the same tap loop. That
+ * removes two thirds of the clamp arithmetic and reads each tap once instead
+ * of three times. The accumulation order for every channel is unchanged, so
+ * the output is bit-identical to the naive per-channel form.
+ */
+export function gaussianRGBA(src: Uint8ClampedArray, w: number, h: number, sigma: number): Uint8ClampedArray {
   const kernel = gaussianKernel(sigma);
   const radius = (kernel.length - 1) / 2;
+  const taps = new Int32Array(kernel.length);
   const tmp = new Float32Array(w * h * 4);
   const out = new Uint8ClampedArray(w * h * 4);
 
   for (let y = 0; y < h; y++) {
     const row = y * w * 4;
     for (let x = 0; x < w; x++) {
-      const o = row + x * 4;
-      for (let c = 0; c < 3; c++) {
-        let acc = 0;
-        for (let i = -radius; i <= radius; i++) {
-          const sx = clampInt(x + i, 0, w - 1);
-          acc += src[row + sx * 4 + c] * kernel[i + radius];
-        }
-        tmp[o + c] = acc;
+      for (let k = 0; k < kernel.length; k++) taps[k] = clampInt(x + k - radius, 0, w - 1) * 4;
+      let ar = 0;
+      let ag = 0;
+      let ab = 0;
+      for (let k = 0; k < kernel.length; k++) {
+        const base = row + taps[k];
+        const weight = kernel[k];
+        ar += src[base] * weight;
+        ag += src[base + 1] * weight;
+        ab += src[base + 2] * weight;
       }
+      const o = row + x * 4;
+      tmp[o] = ar;
+      tmp[o + 1] = ag;
+      tmp[o + 2] = ab;
       tmp[o + 3] = src[o + 3];
     }
   }
 
+  const stride = w * 4;
   for (let y = 0; y < h; y++) {
-    const col = y * 4;
     for (let x = 0; x < w; x++) {
-      const o = col + x * w * 4;
-      for (let c = 0; c < 3; c++) {
-        let acc = 0;
-        for (let i = -radius; i <= radius; i++) {
-          const sy = clampInt(y + i, 0, h - 1);
-          acc += tmp[sy * w * 4 + x * 4 + c] * kernel[i + radius];
-        }
-        out[o + c] = acc;
+      const xoff = x * 4;
+      for (let k = 0; k < kernel.length; k++) taps[k] = clampInt(y + k - radius, 0, h - 1) * stride;
+      let ar = 0;
+      let ag = 0;
+      let ab = 0;
+      for (let k = 0; k < kernel.length; k++) {
+        const base = taps[k] + xoff;
+        const weight = kernel[k];
+        ar += tmp[base] * weight;
+        ag += tmp[base + 1] * weight;
+        ab += tmp[base + 2] * weight;
       }
+      const o = y * stride + xoff;
+      out[o] = ar;
+      out[o + 1] = ag;
+      out[o + 2] = ab;
       out[o + 3] = tmp[o + 3];
     }
   }
@@ -176,8 +201,12 @@ function boxPass(
   const win = radius * 2 + 1;
   const outer = horizontal ? h : w;
   const inner = horizontal ? w : h;
+  // The source steps along the pass axis; the destination steps along that
+  // same axis. These two were swapped, which scattered every written pixel
+  // across unrelated rows/columns (the mirror of the transpose bug that the
+  // gaussian pass had) - see tests/unit/blur.test.ts.
   const stepSrc = horizontal ? 4 : w * 4;
-  const stepDst = horizontal ? w * 4 : 4;
+  const stepDst = horizontal ? 4 : w * 4;
 
   for (let a = 0; a < outer; a++) {
     const base = horizontal ? a * w * 4 : a * 4;
@@ -209,7 +238,7 @@ function boxPass(
 }
 
 /** Multi-pass box blur (3 passes approximate a Gaussian); returns a new buffer. */
-function boxBlurCopy(src: Uint8ClampedArray, w: number, h: number, radius: number, passes = 3): Uint8ClampedArray {
+export function boxBlurCopy(src: Uint8ClampedArray, w: number, h: number, radius: number, passes = 3): Uint8ClampedArray {
   const a = new Uint8ClampedArray(src);
   const b = new Uint8ClampedArray(src.length);
   for (let p = 0; p < passes; p++) {

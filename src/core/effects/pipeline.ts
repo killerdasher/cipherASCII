@@ -253,24 +253,36 @@ export async function applyEffectsToRaster(
   pipeline: EffectsPipeline,
   frame: number = 0,
 ): Promise<Raster> {
-  let current = { ...input, data: new Uint8ClampedArray(input.data) };
+  // Ping-pong between two pre-allocated frames: N effects used to allocate a
+  // fresh full-frame copy each (N+1 allocations of `width*height*4` bytes per
+  // render, all garbage the next render has to collect). The copy itself
+  // stays - every effect mutates its target in place and must see the previous
+  // frame - but only two buffers are ever allocated, and they are reused for
+  // the whole stack.
+  let front: Raster = { ...input, data: new Uint8ClampedArray(input.data) };
+  let spare: Uint8ClampedArray = new Uint8ClampedArray(input.data.length);
 
   for (const effect of pipeline.effects) {
     if (!effect.enabled) continue;
-    current = await applySingleEffect(current, effect, frame);
+    const recycled = front.data;
+    front = await applySingleEffect(front, effect, frame, spare);
+    spare = recycled;
   }
 
-  return current;
+  return front;
 }
 
 async function applySingleEffect(
   input: Raster,
   effect: EffectSettings,
   frame: number,
+  target?: Uint8ClampedArray,
 ): Promise<Raster> {
   const { id, intensity, params } = effect;
-  const output = { ...input, data: new Uint8ClampedArray(input.data) };
-  const { width, height, data } = output;
+  const data = target ?? new Uint8ClampedArray(input.data.length);
+  data.set(input.data);
+  const output = { ...input, data };
+  const { width, height } = output;
 
   // Simplified effect implementations - in production these would be
   // full shader/GPU implementations. Here we provide CPU fallbacks.

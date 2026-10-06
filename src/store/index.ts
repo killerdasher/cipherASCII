@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { deepEqual } from '../core/util';
 import type { QualityMode } from '../core/perf/quality';
 import type { PerfStats } from '../core/perf/stats';
 import { subscribeWithSelector } from 'zustand/middleware';
@@ -307,8 +308,7 @@ export const useStore = create<AppState>()(
 
     // Does moving between two documents change what the worker should draw?
     const renderSettingsChanged = (a: Document, b: Document): boolean =>
-      JSON.stringify(a.imageSettings) !== JSON.stringify(b.imageSettings) ||
-      JSON.stringify(a.textSettings) !== JSON.stringify(b.textSettings);
+      !deepEqual(a.imageSettings, b.imageSettings) || !deepEqual(a.textSettings, b.textSettings);
 
     return {
       document: initialDocument,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clamp,
+  deepEqual,
   hashString,
   isCellCount,
   isPrintableChar,
@@ -58,6 +59,40 @@ describe('util', () => {
   describe('newId', () => {
     it('includes prefix', () => expect(newId('test').startsWith('test')).toBe(true));
     it('is unique', () => expect(newId('x')).not.toBe(newId('x')));
+  });
+
+  describe('deepEqual', () => {
+    it('treats identical primitives and references as equal', () => {
+      const o = { a: 1 };
+      expect(deepEqual(1, 1)).toBe(true);
+      expect(deepEqual('x', 'x')).toBe(true);
+      expect(deepEqual(null, null)).toBe(true);
+      expect(deepEqual(o, o)).toBe(true);
+      expect(deepEqual(undefined, undefined)).toBe(true);
+    });
+
+    it('compares nested objects and arrays structurally', () => {
+      expect(deepEqual({ a: { b: [1, 2, { c: 3 }] } }, { a: { b: [1, 2, { c: 3 }] } })).toBe(true);
+      expect(deepEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+      expect(deepEqual([1, 2, 3], [1, 2, 3])).toBe(true);
+    });
+
+    it('rejects shape and value differences', () => {
+      expect(deepEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+      expect(deepEqual({ a: 1 }, { b: 1 })).toBe(false);
+      expect(deepEqual([1, 2], [1, 2, 3])).toBe(false);
+      expect(deepEqual([1, 2], { 0: 1, 1: 2 })).toBe(false);
+      expect(deepEqual({ a: { b: 1 } }, { a: { b: 2 } })).toBe(false);
+      expect(deepEqual(1, '1')).toBe(false);
+      expect(deepEqual(null, {})).toBe(false);
+    });
+
+    it('matches JSON semantics on settings-shaped payloads', () => {
+      const a = { columns: 100, dither: { algorithm: 'bayer8', strength: 0.5 }, crop: null };
+      const b = JSON.parse(JSON.stringify(a));
+      expect(deepEqual(a, b)).toBe(true);
+      expect(deepEqual(a, { ...b, columns: 101 })).toBe(false);
+    });
   });
 
   describe('Rng', () => {

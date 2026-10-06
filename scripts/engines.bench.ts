@@ -21,7 +21,8 @@ import { cellFxRuntime, gridToPlane, planeToGrid, CellEffectPipeline, CELL_EFFEC
 import { cloneGrid, createGrid } from '../src/core/grid';
 import { Tween } from '../src/core/animation/tween';
 import { getEasing } from '../src/core/animation/easing';
-import type { AsciiGrid } from '../src/core/types';
+import type { AsciiGrid, Raster } from '../src/core/types';
+import { applyEffectsToRaster, type EffectSettings, type EffectId } from '../src/core/effects/pipeline';
 
 const SIZE: Array<[number, number]> = [
   [100, 50],
@@ -260,5 +261,83 @@ describe('animation core', () => {
     printTable('tween update (ms — best of 50)', ['tweens', 'ms', 'tweens/s'], rows);
     expect(rows.length).toBe(2);
     expect(Number(rows[1][1])).toBeLessThan(1000);
+  });
+});
+
+describe('raster effects pipeline', () => {
+  // 512x512 RGBA (1 MB per frame) with a realistic six-effect stack. Every
+  // effect used to allocate its own full-frame copy (N+1 allocations per
+  // render), which is what this case exists to measure.
+  const SIZE = 512;
+  const STACK: EffectId[] = ['bloom', 'chromaticAberration', 'blur', 'scanlines', 'filmGrain', 'vignette'];
+
+  function makeRaster(): Raster {
+    const data = new Uint8ClampedArray(SIZE * SIZE * 4);
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const i = (y * SIZE + x) * 4;
+        data[i] = (x * 7) & 0xff;
+        data[i + 1] = (y * 5) & 0xff;
+        data[i + 2] = ((x ^ y) * 3) & 0xff;
+        data[i + 3] = 255;
+      }
+    }
+    return { width: SIZE, height: SIZE, data };
+  }
+
+  const effects: EffectSettings[] = STACK.map((id) => ({ id, enabled: true, intensity: 0.7, params: {} }));
+
+  it('breaks the stack down effect by effect', async () => {
+    const rows: (string | number)[][] = [];
+    for (const id of STACK) {
+      let best = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 4; i++) {
+        const started = performance.now();
+        await applyEffectsToRaster(makeRaster(), { effects: [{ id, enabled: true, intensity: 0.7, params: {} }] }, 1);
+        best = Math.min(best, performance.now() - started);
+      }
+      rows.push([id, best.toFixed(2)]);
+    }
+    rows.sort((a, b) => Number(b[1]) - Number(a[1]));
+    printTable('per-effect cost (512x512, single effect, best ms)', ['effect', 'ms'], rows);
+    expect(rows.length).toBe(STACK.length);
+  });
+
+  it('shows how cost scales with source size', async () => {
+    const rows: (string | number)[][] = [];
+    for (const size of [512, 1024, 2048]) {
+      const data = new Uint8ClampedArray(size * size * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = (i * 7) & 0xff;
+        data[i + 1] = (i * 5) & 0xff;
+        data[i + 2] = (i * 3) & 0xff;
+        data[i + 3] = 255;
+      }
+      const raster: Raster = { width: size, height: size, data };
+      const started = performance.now();
+      await applyEffectsToRaster(raster, { effects }, 1);
+      const ms = performance.now() - started;
+      const megarixels = (size * size) / 1e6;
+      rows.push([`${size}x${size}`, megarixels.toFixed(2), ms.toFixed(1), ((megarixels / ms) * 1000).toFixed(1)]);
+    }
+    printTable('stack cost vs source size (6 effects)', ['source', 'Mpx', 'ms', 'Mpx/s'], rows);
+    expect(rows.length).toBe(3);
+  });
+
+  it('applies a six-effect stack to a 512x512 raster', async () => {
+    const runs = 5;
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < runs; i++) {
+      const started = performance.now();
+      await applyEffectsToRaster(makeRaster(), { effects }, 1);
+      best = Math.min(best, performance.now() - started);
+    }
+    const megarixels = (SIZE * SIZE) / 1e6;
+    printTable(
+      'raster effects (512x512 RGBA = 1 MB, 6-effect stack)',
+      ['best ms', 'Mpx/s', 'per-effect ms'],
+      [[best.toFixed(2), ((megarixels / best) * 1000).toFixed(1), (best / STACK.length).toFixed(2)]],
+    );
+    expect(best).toBeGreaterThan(0);
   });
 });
