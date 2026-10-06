@@ -92,8 +92,12 @@ function stripeMask(
   const offset = channel * stripe;
   const t = (((x - offset) % period) + period) % period;
   if (!linear || period < 4) return t < stripe ? 1 : 0;
-  const center = offset + stripe / 2;
-  return 0.5 + 0.5 * Math.cos((2 * Math.PI * (x - center)) / period);
+  // Same cosine as `cos(2*PI*(x - offset - stripe/2)/period)`, but written
+  // against the already-reduced `t`: mathematically identical (the cosine is
+  // periodic) and now exactly periodic in `x`, so the memoised mask table in
+  // `applySubtexture` reproduces it bit for bit instead of drifting by a ULP
+  // at large x.
+  return 0.5 + 0.5 * Math.cos((2 * Math.PI * (t - stripe / 2)) / period);
 }
 
 /**
@@ -159,6 +163,76 @@ export function subtextureMask(
  * Multiply the subtexture mask into an RGBA pixel buffer in place.
  * `width`/`height` describe the buffer; a mismatched buffer length is a no-op.
  */
+/**
+ * Period of the mask pattern along each axis, in pixels.
+ *
+ * Every pattern is periodic, which is what makes the lookup table below an
+ * exact replacement for calling {@link subtextureMask} per pixel.
+ */
+function maskPeriods(
+  pattern: SubtexturePattern,
+  scale: number,
+): [periodX: number, periodY: number] {
+  switch (pattern) {
+    case 'scanlines':
+      return [1, 2 * scale];
+    case 'grid':
+      return [scale, scale];
+    case 'rgbStripes':
+      return [3 * scale, 1];
+    case 'rgbRosette':
+      return [3 * scale, 3 * scale];
+    default:
+      return [1, 1];
+  }
+}
+
+interface MaskTable {
+  periodX: number;
+  periodY: number;
+  /** RGB triples, row-major over one period. Float64 so values stay exact. */
+  data: Float64Array;
+}
+
+const maskTables = new Map<string, MaskTable>();
+
+/**
+ * One period of mask factors, memoised by pattern/scale/interpolation.
+ *
+ * `applySubtexture` used to call `subtextureMask` - a function call plus
+ * `Math.cos`/`Math.hypot` - for every pixel of every paint (up to 16 Mpx per
+ * frame). Because the patterns are periodic, computing one period and
+ * indexing with `x % periodX` yields bit-identical values.
+ */
+function maskTable(
+  pattern: SubtexturePattern,
+  scale: number,
+  interpolation: 'nearest' | 'linear',
+): MaskTable {
+  const key = `${pattern}|${scale}|${interpolation}`;
+  const hit = maskTables.get(key);
+  if (hit) return hit;
+
+  const [periodX, periodY] = maskPeriods(pattern, scale);
+  const data = new Float64Array(periodX * periodY * 3);
+  for (let y = 0; y < periodY; y++) {
+    for (let x = 0; x < periodX; x++) {
+      const [mr, mg, mb] = subtextureMask(pattern, x, y, scale, interpolation);
+      const o = (y * periodX + x) * 3;
+      data[o] = mr;
+      data[o + 1] = mg;
+      data[o + 2] = mb;
+    }
+  }
+
+  const table: MaskTable = { periodX, periodY, data };
+  // Bounded: the settings that produce a key are few, and a pathological
+  // caller cycling through them must not grow this without limit.
+  if (maskTables.size >= 16) maskTables.clear();
+  maskTables.set(key, table);
+  return table;
+}
+
 export function applySubtexture(
   pixels: Uint8ClampedArray | Uint8Array,
   width: number,
@@ -171,16 +245,19 @@ export function applySubtexture(
 
   const opacity = Math.min(1, Math.max(0, settings.opacity));
   const scale = Math.max(1, Math.round(settings.scale));
+  const { periodX, periodY, data } = maskTable(
+    settings.pattern,
+    scale,
+    settings.interpolation,
+  );
 
   for (let y = 0; y < height; y++) {
+    const row = (y % periodY) * periodX * 3;
     for (let x = 0; x < width; x++) {
-      const [mr, mg, mb] = subtextureMask(
-        settings.pattern,
-        x,
-        y,
-        scale,
-        settings.interpolation,
-      );
+      const m = row + (x % periodX) * 3;
+      const mr = data[m];
+      const mg = data[m + 1];
+      const mb = data[m + 2];
       const i = (y * width + x) * 4;
       pixels[i] = pixels[i] * (1 - opacity * (1 - mr));
       pixels[i + 1] = pixels[i + 1] * (1 - opacity * (1 - mg));

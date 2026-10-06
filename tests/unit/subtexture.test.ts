@@ -171,3 +171,40 @@ describe('subtexture gating and normalisation', () => {
     expect(clamped).toEqual({ pattern: 'grid', scale: 32, opacity: 0, interpolation: 'nearest' });
   });
 });
+
+describe('applySubtexture mask table', () => {
+  it('is bit-identical to evaluating subtextureMask per pixel', () => {
+    const w = 17;
+    const h = 13;
+    const base = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < base.length; i++) base[i] = (i * 7 + 13) & 0xff;
+
+    const patterns = ['scanlines', 'rgbStripes', 'rgbRosette', 'grid'] as const;
+    const interpolations = ['nearest', 'linear'] as const;
+
+    for (const pattern of patterns) {
+      for (const scale of [1, 2, 5]) {
+        for (const interpolation of interpolations) {
+          for (const opacity of [1, 0.7]) {
+            const settings = { pattern, scale, opacity, interpolation } as const;
+
+            const naive = Uint8ClampedArray.from(base);
+            for (let y = 0; y < h; y++) {
+              for (let x = 0; x < w; x++) {
+                const [mr, mg, mb] = subtextureMask(pattern, x, y, scale, interpolation);
+                const i = (y * w + x) * 4;
+                naive[i] = naive[i] * (1 - opacity * (1 - mr));
+                naive[i + 1] = naive[i + 1] * (1 - opacity * (1 - mg));
+                naive[i + 2] = naive[i + 2] * (1 - opacity * (1 - mb));
+              }
+            }
+
+            const fast = Uint8ClampedArray.from(base);
+            applySubtexture(fast, w, h, settings);
+            expect(fast, `${pattern}/${scale}/${interpolation}/${opacity}`).toEqual(naive);
+          }
+        }
+      }
+    }
+  });
+});

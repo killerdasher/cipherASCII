@@ -175,7 +175,14 @@ These are real and documented rather than papered over (they come from
    (−39%)** for the same six-effect 512² stack (the rest of the gain is the
    gaussian rewrite in `imageEffects.ts` — see `docs/EFFECTS.md` §8).
 3. **Subtexture `getImageData`/`putImageData` round-trip** on the editor paint
-   path, skipped only for very large canvases.
+   path, skipped only for very large canvases (>16 Mpx) and whenever the
+   quality ladder drops `fullEffects`. The per-pixel mask maths that used to
+   ride along with it - a function call plus `Math.cos`/`Math.hypot` for every
+   pixel of every frame - is now memoised to one period
+   (`maskTable` in `subtexture.ts`), which is bit-identical to the naive loop
+   (`tests/unit/subtexture.test.ts`) but no longer does trig per pixel. What
+   is left is the readback itself: the two canvas round-trips, unavoidable in
+   a 2D context without moving the mask to a `multiply` composite.
 4. ~~**Bundle size**~~ — closed. Rolldown `codeSplitting.groups` plus a lazy
    `PixiViewport`: the app chunk went **847 → 247 kB**, pixi ships as a
    511 kB async chunk loaded only when the viewport mounts, and the >500 kB
