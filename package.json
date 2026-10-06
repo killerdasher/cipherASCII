@@ -1,0 +1,92 @@
+{
+  "name": "cipherascii",
+  "version": "0.1.0",
+  "private": true,
+  "author": "killerdasher",
+  "description": "cipherASCII - a professional-grade ASCII art and video creation studio: generate, edit, transform, compose, preview, export and manage ASCII art.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "postinstall": "node scripts/prepare-ffmpeg-core.mjs",
+    "prebuild": "node scripts/prepare-ffmpeg-core.mjs",
+    "build": "tsc --noEmit && vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "fuzz": "vitest run tests/fuzz",
+    "bench": "vitest run --config vitest.scripts.config.ts scripts/bench.bench.ts",
+    "simulations": "vitest run --config vitest.scripts.config.ts scripts/simulations.bench.ts",
+    "electron:dev": "npm run build:electron && concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && npm run build:electron && electron-builder",
+    "electron:pack": "npm run build && npm run build:electron && electron-builder --dir",
+    "electron:preview": "npm run build:electron && electron .",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "framer-motion": "^14.0.0",
+    "pixi.js": "^8.22.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@napi-rs/canvas": "^1.0.10",
+    "@types/jpeg-js": "^0.3.0",
+    "@types/node": "^26.6.4",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.6.1",
+    "canvas": "^3.2.3",
+    "concurrently": "^10.0.5",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jpeg-js": "^0.4.4",
+    "jsdom": "^30.1.1",
+    "pngjs": "^7.0.0",
+    "postcss": "^8.5.29",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.asciiartstudio.app",
+    "productName": "cipherASCII",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json",
+      "!node_modules/@ffmpeg/core"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/icon.png"
+    }
+  }
+}

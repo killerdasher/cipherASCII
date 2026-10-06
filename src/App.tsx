@@ -1,0 +1,431 @@
+import { useEffect } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useStore, useStoreShallow, selectDocument, selectActiveLayer, selectLayers, selectCanvasSettings, selectIsDirty, selectRenderGeneration, selectPendingRender, selectActivePanel, selectActiveRightPanel, selectShowGrid, selectShowGuides, selectCrtGlow, selectGpuPreview, selectZoomLevel, selectTheme, selectTool } from './store';
+import type { LeftPanelId, RightPanelId } from './store';
+import type { ToolState } from './core/types';
+import { Toolbar } from './components/Toolbar';
+import { LayerPanel } from './components/LayerPanel';
+import { PropertyPanel } from './components/PropertyPanel';
+import { ExportPanel } from './components/ExportPanel';
+import { SettingsPanel } from './components/SettingsPanel';
+import { EditorCanvas } from './components/EditorCanvas';
+import { TerminalPreview } from './components/TerminalPreview';
+import { StatusBar } from './components/StatusBar';
+import { NewProjectModal } from './components/NewProjectModal';
+import { OpenProjectModal } from './components/OpenProjectModal';
+import { SaveProjectModal } from './components/SaveProjectModal';
+import { EffectsPanel } from './components/EffectsPanel';
+import { TimelinePanel } from './components/TimelinePanel';
+import { PalettePanel } from './components/PalettePanel';
+import { PresetPanel } from './components/PresetPanel';
+import { ThemePanel } from './components/ThemePanel';
+import { AsciiControlsPanel } from './components/AsciiControlsPanel';
+import { ImportImageButton, ImageDropZone } from './components/ImportImage';
+import { renderImage, renderText } from './worker/client';
+import { advanceFrame } from './core/timeline/playback';
+
+const LEFT_TABS: Array<{ id: LeftPanelId; label: string }> = [
+  { id: 'layers', label: 'Layers' },
+  { id: 'properties', label: 'Properties' },
+  { id: 'ascii', label: 'ASCII' },
+  { id: 'timeline', label: 'Timeline' },
+];
+
+const RIGHT_TABS: Array<{ id: RightPanelId; label: string }> = [
+  { id: 'export', label: 'Export' },
+  { id: 'effects', label: 'Effects' },
+  { id: 'palette', label: 'Palette' },
+  { id: 'presets', label: 'Presets' },
+  { id: 'theme', label: 'Theme' },
+  { id: 'settings', label: 'Settings' },
+];
+
+function App() {
+  const reduceMotion = useReducedMotion();
+  const panelMotion = {
+    initial: { opacity: 0, y: reduceMotion ? 0 : 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: reduceMotion ? 0 : -6 },
+    transition: { duration: 0.16, ease: 'easeOut' as const },
+  };
+const {
+    document,
+    activeLayer,
+    layers,
+    canvasSettings,
+    isDirty,
+    renderGeneration,
+    pendingRender,
+    terminalMode,
+    terminalCols,
+    terminalRows,
+    newDocument,
+    setDocument,
+    applyCommand,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    setRenderStats,
+    setPendingRender,
+    setStatusMessage,
+    setActivePanel,
+    activePanel,
+    setActiveRightPanel,
+    activeRightPanel,
+    showGrid,
+    showGuides,
+    crtGlow,
+    toggleCrtGlow,
+    gpuPreview,
+    toggleGpuPreview,
+    zoomLevel,
+    setZoom,
+    setTerminalMode,
+    setTerminalSize,
+    theme,
+    tool,
+    setTool,
+  } = useStoreShallow(
+    (s) => ({
+      document: selectDocument(s),
+      activeLayer: selectActiveLayer(s),
+      layers: selectLayers(s),
+      canvasSettings: selectCanvasSettings(s),
+      isDirty: selectIsDirty(s),
+      renderGeneration: selectRenderGeneration(s),
+      pendingRender: selectPendingRender(s),
+      terminalMode: s.terminalMode,
+      terminalCols: s.terminalCols,
+      terminalRows: s.terminalRows,
+      theme: selectTheme(s),
+      tool: selectTool(s),
+      setTool: s.setTool,
+      newDocument: s.newDocument,
+      setDocument: s.setDocument,
+      applyCommand: s.applyCommand,
+      undo: s.undo,
+      redo: s.redo,
+      canUndo: s.canUndo,
+      canRedo: s.canRedo,
+      setRenderStats: s.setRenderStats,
+      setPendingRender: s.setPendingRender,
+      setStatusMessage: s.setStatusMessage,
+      setActivePanel: s.setActivePanel,
+      activePanel: selectActivePanel(s),
+      setActiveRightPanel: s.setActiveRightPanel,
+      activeRightPanel: selectActiveRightPanel(s),
+      showGrid: selectShowGrid(s),
+      showGuides: selectShowGuides(s),
+      crtGlow: selectCrtGlow(s),
+      toggleCrtGlow: s.toggleCrtGlow,
+      gpuPreview: selectGpuPreview(s),
+      toggleGpuPreview: s.toggleGpuPreview,
+      zoomLevel: selectZoomLevel(s),
+      setZoom: s.setZoom,
+      setTerminalMode: s.setTerminalMode,
+      setTerminalSize: s.setTerminalSize,
+    })
+  );
+
+  // Auto-render when generation changes
+  useEffect(() => {
+    if (!pendingRender) return;
+    const doc = useStore.getState().document;
+    const activeLayer = doc.layers.find((l) => l.id === doc.activeLayerId);
+    if (!activeLayer) return;
+
+    const doRender = async () => {
+      const { imageSettings, textSettings } = doc;
+      const effectsPipeline = useStore.getState().effectsPipeline;
+      try {
+        if (activeLayer.kind === 'image' && activeLayer.source) {
+          const result = await renderImage(activeLayer.source.dataUrl, imageSettings, effectsPipeline);
+          applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
+          setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
+        } else if (activeLayer.kind === 'text') {
+          const result = await renderText(activeLayer.text, textSettings);
+          applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
+          setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
+        }
+      } catch (e) {
+        console.error('Render failed:', e);
+        setStatusMessage(`Render error: ${e instanceof Error ? e.message : 'unknown'}`);
+      } finally {
+        setPendingRender(false);
+      }
+    };
+    doRender();
+  }, [renderGeneration, pendingRender]);
+
+  // Timeline playback: a rAF loop advancing the playhead at the timeline's
+  // fps. Only the timeline slice changes - the document and the render
+  // generation are untouched (seeking is pure view state).
+  const timelinePlaying = useStore((s) => s.timeline?.playing ?? false);
+  const timelineFps = useStore((s) => s.timeline?.fps ?? 30);
+  useEffect(() => {
+    if (!timelinePlaying) return;
+    const frameBudget = 1000 / Math.max(1, timelineFps);
+    let raf = 0;
+    let last = performance.now();
+    let acc = 0;
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      acc += now - last;
+      last = now;
+      if (acc < frameBudget) return;
+      // If the machine stalled, drop the backlog instead of fast-forwarding.
+      acc = acc > frameBudget * 4 ? frameBudget : acc - frameBudget;
+      const st = useStore.getState();
+      const tl = st.timeline;
+      if (!tl || !tl.playing) return;
+      const next = advanceFrame(tl);
+      if (next.frame === null) st.setTimelinePlaying(false);
+      else st.setTimelineCurrentFrame(next.frame);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [timelinePlaying, timelineFps]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Never steal keys from a focused input/select/textarea (typing, native
+      // undo, Enter to submit, ...).
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+      if (typing) return;
+
+      // Unmodified letters select the drawing tool.
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const toolByKey: Record<string, ToolState['activeTool']> = {
+          b: 'brush',
+          e: 'eraser',
+          f: 'fill',
+          i: 'eyedropper',
+          h: 'pan',
+        };
+        const next = toolByKey[e.key.toLowerCase()];
+        if (next) {
+          e.preventDefault();
+          useStore.getState().setTool({ activeTool: next });
+          return;
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('ascii:save'));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        newDocument();
+      }
+      if (e.key === ' ') {
+        e.preventDefault();
+        setTerminalMode(!terminalMode);
+      }
+      if (e.key === 't' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        useStore.getState().setActivePanel('timeline');
+      }
+      if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        useStore.getState().setActiveRightPanel('palette');
+      }
+      if (e.key === 'e' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        useStore.getState().setActiveRightPanel('effects');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [terminalMode]);
+
+  // Native File/Edit/View menu (see electron/main.ts) -> the same actions the
+  // toolbar exposes. `electronAPI` only exists inside the packaged app.
+  useEffect(() => {
+    const api = (
+      window as unknown as {
+        electronAPI?: { onMenuAction: (callback: (action: string) => void) => () => void };
+      }
+    ).electronAPI;
+    if (!api?.onMenuAction) return;
+    const unsubscribe = api.onMenuAction((action) => {
+      const store = useStore.getState();
+      switch (action) {
+        case 'new':
+          store.newDocument();
+          break;
+        case 'open':
+          window.dispatchEvent(new Event('ascii:open'));
+          break;
+        case 'save':
+          window.dispatchEvent(new Event('ascii:save'));
+          break;
+        case 'undo':
+          store.undo();
+          break;
+        case 'redo':
+          store.redo();
+          break;
+        case 'toggle-terminal':
+          store.setTerminalMode(!store.terminalMode);
+          break;
+        default:
+          break;
+      }
+    });
+    // Marker for automation: the native menu bridge is hooked up.
+    (window as unknown as Record<string, unknown>).__menuHooked = true;
+    return unsubscribe;
+  }, []);
+
+  return (
+    <div className="app" data-theme={theme.id}>
+      <Toolbar
+        onNew={newDocument}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo()}
+        canRedo={canRedo()}
+        onToggleTerminal={() => setTerminalMode(!terminalMode)}
+        terminalMode={terminalMode}
+        zoomLevel={zoomLevel}
+        onZoomChange={setZoom}
+        crtGlow={crtGlow}
+        onToggleCrtGlow={toggleCrtGlow}
+        gpuPreview={gpuPreview}
+        onToggleGpuPreview={toggleGpuPreview}
+        tool={tool}
+        onToolChange={setTool}
+        modals={
+          <>
+            <ImportImageButton />
+            <NewProjectModal onCreate={newDocument} />
+            <OpenProjectModal onOpen={setDocument} />
+            <SaveProjectModal document={document} isDirty={isDirty} />
+          </>
+        }
+      />
+
+      <div className="main-layout">
+        <aside className="left-panel">
+          <div className="panel-tabs" role="tablist" aria-label="Document panels">
+            {LEFT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                id={`tab-left-${tab.id}`}
+                aria-selected={activePanel === tab.id}
+                aria-controls="panel-left"
+                className={activePanel === tab.id ? 'active' : ''}
+                onClick={() => setActivePanel(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="panel-content"
+            id="panel-left"
+            role="tabpanel"
+            aria-labelledby={`tab-left-${activePanel}`}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={activePanel} {...panelMotion}>
+                {activePanel === 'layers' && (
+                  <LayerPanel layers={layers} activeLayerId={document.activeLayerId} />
+                )}
+                {activePanel === 'properties' && <PropertyPanel layer={activeLayer ?? null} />}
+                {activePanel === 'ascii' && <AsciiControlsPanel />}
+                {activePanel === 'timeline' && <TimelinePanel />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </aside>
+
+        <main className="editor-area">
+          <ImageDropZone>
+            <EditorCanvas
+              document={document}
+              activeLayer={activeLayer}
+              showGrid={showGrid}
+              showGuides={showGuides}
+              zoomLevel={zoomLevel}
+            />
+          </ImageDropZone>
+        </main>
+
+        <aside className="right-panel">
+          <div className="panel-tabs" role="tablist" aria-label="Tool panels">
+            {RIGHT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                id={`tab-right-${tab.id}`}
+                aria-selected={activeRightPanel === tab.id}
+                aria-controls="panel-right"
+                className={activeRightPanel === tab.id ? 'active' : ''}
+                onClick={() => setActiveRightPanel(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="panel-content"
+            id="panel-right"
+            role="tabpanel"
+            aria-labelledby={`tab-right-${activeRightPanel}`}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={activeRightPanel} {...panelMotion}>
+                {activeRightPanel === 'export' && <ExportPanel />}
+                {activeRightPanel === 'effects' && <EffectsPanel />}
+                {activeRightPanel === 'palette' && <PalettePanel />}
+                {activeRightPanel === 'presets' && <PresetPanel />}
+                {activeRightPanel === 'theme' && <ThemePanel />}
+                {activeRightPanel === 'settings' && (
+                  <SettingsPanel
+                    imageSettings={document.imageSettings}
+                    textSettings={document.textSettings}
+                    canvasSettings={canvasSettings}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </aside>
+      </div>
+
+      {terminalMode && (
+        <TerminalPreview
+          document={document}
+          cols={terminalCols}
+          rows={terminalRows}
+          onResize={setTerminalSize}
+        />
+      )}
+
+      <StatusBar
+        isDirty={isDirty}
+        renderGeneration={renderGeneration}
+        pendingRender={pendingRender}
+        cursor={activeLayer ? { x: 0, y: 0 } : null}
+        zoomLevel={zoomLevel}
+      />
+    </div>
+  );
+}
+
+export default App;
