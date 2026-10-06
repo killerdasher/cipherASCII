@@ -129,9 +129,9 @@ export function composite(
       for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
           const i = y * target.width + x;
-          const a = Math.min(opacity, 255);
+          const a = opacity;
           target.bg[i] = blendColor(target.bg[i], plane.background, blend, a);
-          if (target.alpha[i] === 0 && target.glyph[i] === 0) target.alpha[i] = a;
+          if (target.alpha[i] < a) target.alpha[i] = a;
         }
       }
     }
@@ -147,10 +147,9 @@ export function composite(
         const cellAlpha = plane.alpha[pi];
         const g = plane.glyph[pi];
         const attr = plane.attr[pi];
-        const isBlank = g === 0 && fg === NO_CELL && bg === NO_CELL && cellAlpha === 0;
-        if (isBlank) continue;
-
-        const a = Math.min(opacity, cellAlpha === 0 ? opacity : cellAlpha);
+        // alpha is standard: 0 = invisible, 255 = fully opaque.
+        const a = Math.min(opacity, cellAlpha);
+        if (a === 0) continue;
         if (fg !== NO_CELL) {
           target.fg[i] = blendColor(target.fg[i], fg, blend, a);
         }
@@ -161,7 +160,7 @@ export function composite(
           target.glyph[i] = g;
         }
         if (attr !== Attr.None) target.attr[i] = attr;
-        if (cellAlpha > target.alpha[i]) target.alpha[i] = a;
+        if (a > target.alpha[i]) target.alpha[i] = a;
       }
     }
   }
