@@ -27,52 +27,46 @@ const NO_COLOR = -1;
  */
 let rasterRev = 0;
 
-/** Write a character *and* its colour; returns a new grid when anything changed. */
-function paintCell(
-  grid: AsciiGrid,
-  x: number,
-  y: number,
-  ch: string,
-  color: number,
-): AsciiGrid {
-  if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return grid;
+/**
+ * Write one cell into a grid the caller already owns.
+ *
+ * Returns whether anything changed. The stroke path clones the layer grid
+ * exactly once when the pointer goes down and then mutates that clone, so a
+ * brush costs O(1) allocations per stroke instead of O(cells) per cell.
+ */
+function paintCellInPlace(grid: AsciiGrid, x: number, y: number, ch: string, color: number): boolean {
+  if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return false;
   const c = ch.length === 0 ? ' ' : [...ch][0];
   const i = y * grid.width + x;
   const current = grid.fg ? grid.fg[i] : NO_COLOR;
-  if (grid.chars[i] === c && current === color) return grid;
-  const next = cloneGrid(grid);
-  next.chars[i] = c;
-  if (next.fg) {
-    next.fg[i] = color;
+  if (grid.chars[i] === c && current === color) return false;
+  grid.chars[i] = c;
+  if (grid.fg) {
+    grid.fg[i] = color;
   } else if (color !== NO_COLOR) {
-    next.fg = new Int32Array(grid.width * grid.height).fill(NO_COLOR);
-    next.fg[i] = color;
+    grid.fg = new Int32Array(grid.width * grid.height).fill(NO_COLOR);
+    grid.fg[i] = color;
   }
-  return next;
+  return true;
 }
 
-/** Stamp a square brush of `size` cells centred on (cx, cy). */
-function stamp(
+/** Stamp a square brush of `size` cells centred on (cx, cy), in place. */
+function stampInPlace(
   grid: AsciiGrid,
   cx: number,
   cy: number,
   size: number,
   ch: string,
   color: number,
-): { grid: AsciiGrid; changed: boolean } {
+): boolean {
   const radius = Math.floor((Math.max(1, size) - 1) / 2);
-  let next = grid;
   let changed = false;
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
-      const updated = paintCell(next, cx + dx, cy + dy, ch, color);
-      if (updated !== next) {
-        next = updated;
-        changed = true;
-      }
+      if (paintCellInPlace(grid, cx + dx, cy + dy, ch, color)) changed = true;
     }
   }
-  return { grid: next, changed };
+  return changed;
 }
 
 /** Bresenham line so fast pointer moves leave no gaps in the stroke. */
@@ -212,10 +206,14 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     const grid = fxGrid ?? composedGrid;
     const cellW = CELL_W * zoomLevel;
     const cellH = CELL_H * zoomLevel;
-    canvas.width = grid.width * cellW;
-    canvas.height = grid.height * cellH;
-    canvas.style.width = `${canvas.width}px`;
-    canvas.style.height = `${canvas.height}px`;
+    const width = grid.width * cellW;
+    const height = grid.height * cellH;
+    // Assigning width/height resets the backing store; only pay that when the
+    // size actually changed.
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
 
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -226,27 +224,33 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     if (showGrid) {
       ctx.strokeStyle = border;
       ctx.lineWidth = 1;
+      ctx.beginPath();
       for (let x = 0; x <= grid.width; x++) {
-        ctx.beginPath();
         ctx.moveTo(x * cellW, 0);
         ctx.lineTo(x * cellW, canvas.height);
-        ctx.stroke();
       }
       for (let y = 0; y <= grid.height; y++) {
-        ctx.beginPath();
         ctx.moveTo(0, y * cellH);
         ctx.lineTo(canvas.width, y * cellH);
-        ctx.stroke();
       }
+      ctx.stroke();
     }
 
+    // fillStyle is a setter that parses the string; assigning it once per
+    // colour run instead of once per cell is the difference between a paint
+    // and a paint that stutters on dense grids.
     const paintGrid = (target: AsciiGrid): void => {
+      let fill = '';
       for (let y = 0; y < target.height; y++) {
         for (let x = 0; x < target.width; x++) {
           const ch = target.chars[y * target.width + x];
           if (ch === ' ') continue;
           const cell = target.fg ? target.fg[y * target.width + x] : -1;
-          ctx.fillStyle = cell !== -1 && cell >= 0 ? `#${cell.toString(16).padStart(6, '0')}` : fg;
+          const next = cell !== -1 && cell >= 0 ? `#${cell.toString(16).padStart(6, '0')}` : fg;
+          if (next !== fill) {
+            fill = next;
+            ctx.fillStyle = next;
+          }
           ctx.fillText(ch, x * cellW, y * cellH);
         }
       }
@@ -397,10 +401,12 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     if (activeTool === 'brush' || activeTool === 'eraser') {
       const ch = activeTool === 'eraser' ? ' ' : store.tool.brushChar;
       const color = activeTool === 'eraser' ? NO_COLOR : store.tool.foregroundColor;
-      const start = stamp(base, cell.x, cell.y, store.tool.brushSize, ch, color);
-      previewGridRef.current = start.grid;
+      // One clone for the whole stroke; every later cell mutates it in place.
+      const start = cloneGrid(base);
+      stampInPlace(start, cell.x, cell.y, store.tool.brushSize, ch, color);
+      previewGridRef.current = start;
       lastCellRef.current = cell;
-      setPreviewGrid(start.grid);
+      setPreviewGrid(start);
     }
   };
 
@@ -425,13 +431,13 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     if (cell.x === last.x && cell.y === last.y) return;
     const ch = activeTool === 'eraser' ? ' ' : store.tool.brushChar;
     const color = activeTool === 'eraser' ? NO_COLOR : store.tool.foregroundColor;
-    let grid = base;
     walkLine(last.x, last.y, cell.x, cell.y, (x, y) => {
-      grid = stamp(grid, x, y, store.tool.brushSize, ch, color).grid;
+      stampInPlace(base, x, y, store.tool.brushSize, ch, color);
     });
-    previewGridRef.current = grid;
     lastCellRef.current = cell;
-    setPreviewGrid(grid);
+    // New object identity so React recomputes the preview; the arrays are
+    // shared with `base`, which is the clone created at pointer-down.
+    setPreviewGrid({ ...base });
   };
 
   const finishStroke = () => {

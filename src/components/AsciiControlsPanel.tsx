@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, memo } from 'react';
 import { useStore } from '../store';
 import { Slider } from './Slider';
 import { ALL_CHARSET_PRESETS, CHARSET_CATEGORIES } from '../core/charsets/extendedCharsets';
@@ -20,7 +20,7 @@ import type {
  * offset, cell size (columns), color mode, dither and tone shaping — plus the
  * Live Glyph Preview showing exactly which characters the ramp currently uses.
  */
-export function AsciiControlsPanel() {
+function AsciiControlsPanelInner() {
   const imageSettings = useStore((s) => s.document.imageSettings);
   const setImageSettings = useStore((s) => s.setImageSettings);
 
@@ -371,3 +371,5 @@ export function AsciiControlsPanel() {
     </div>
   );
 }
+
+export const AsciiControlsPanel = memo(AsciiControlsPanelInner);

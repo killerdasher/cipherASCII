@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store';
 import { CipherAsciiLogo } from './CipherAsciiLogo';
 import { Slider } from './Slider';
@@ -21,7 +22,7 @@ interface SettingsPanelProps {
   canvasSettings: CanvasSettings;
 }
 
-export function SettingsPanel({ imageSettings, textSettings, canvasSettings }: SettingsPanelProps) {
+function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: SettingsPanelProps) {
   const { setImageSettings, setTextSettings, setCanvasSettings, applyCanvasPreset } = useStore();
 
   return (
@@ -210,3 +211,5 @@ export function SettingsPanel({ imageSettings, textSettings, canvasSettings }: S
     </div>
   );
 }
+
+export const SettingsPanel = memo(SettingsPanelInner);

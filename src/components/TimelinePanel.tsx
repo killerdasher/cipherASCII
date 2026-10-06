@@ -1,10 +1,11 @@
 // @ts-nocheck - timeline UI still uses implicit any while it is migrated
+import { memo } from 'react';
 import React, { useState } from 'react';
 import { useStore, useStoreShallow, selectTimeline, selectActiveTimelineId } from '../store';
 import { Slider } from './Slider';
 import { ANIMATABLE_PROPERTIES, readTrackValue } from '../core/timeline/playback';
 
-export function TimelinePanel() {
+function TimelinePanelInner() {
   const {
     timeline,
     createTimeline,
@@ -299,3 +300,5 @@ function TrackRow({
     </div>
   );
 }
+
+export const TimelinePanel = memo(TimelinePanelInner);

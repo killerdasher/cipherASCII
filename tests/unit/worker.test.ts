@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bumpGeneration, getGeneration, cancelAll, terminateWorker } from '../../src/worker/client';
-import type { EffectsPipeline } from '../../src/core/types';
+import { bumpGeneration, getGeneration, cancelAll, terminateWorker, renderImage, StaleRenderError } from '../../src/worker/client';
+import type { EffectsPipeline, ImageRenderSettings } from '../../src/core/types';
 
 describe('worker client', () => {
   it('bumpGeneration increments', () => {
@@ -160,5 +160,84 @@ describe('worker client', () => {
       terminateWorker();
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('stale render settlement', () => {
+  class FakeWorker {
+    static last: FakeWorker | null = null;
+    onmessage: ((e: { data: unknown }) => void) | null = null;
+    onerror: ((e: unknown) => void) | null = null;
+    posted: any[] = [];
+    constructor() {
+      FakeWorker.last = this;
+    }
+    postMessage(msg: any) {
+      this.posted.push(msg);
+    }
+    terminate() {
+      FakeWorker.last = null;
+    }
+  }
+
+  /** Install the fake worker, drop the cached instance, settle leftovers. */
+  function installFakeWorker(): void {
+    vi.stubGlobal('Worker', FakeWorker);
+    terminateWorker();
+    cancelAll();
+    FakeWorker.last = null;
+  }
+
+  /** Start one render and hand back its promise plus the fake worker. */
+  function startRender(): { promise: Promise<unknown>; worker: FakeWorker } {
+    const promise = renderImage('data:image/png;base64,AAAA', {} as ImageRenderSettings);
+    // The rejection is asserted by the caller; swallow here so an unhandled
+    // rejection cannot race the test.
+    promise.catch(() => undefined);
+    const worker = FakeWorker.last;
+    if (!worker) throw new Error('worker was not created');
+    return { promise, worker };
+  }
+
+  it('bumpGeneration settles superseded jobs instead of leaking them', async () => {
+    installFakeWorker();
+    const { promise, worker } = startRender();
+    const jobId = worker.posted[0].jobId;
+    const assertion = expect(promise).rejects.toThrow(StaleRenderError);
+    bumpGeneration(); // supersede: the awaiting caller must unblock
+    await assertion;
+    // A late reply for that job is dropped instead of resurrected.
+    worker.onmessage?.({
+      data: { kind: 'result', jobId, generationId: getGeneration(), result: {} },
+    } as never);
+  });
+
+  it('a reply from an older generation rejects that job', async () => {
+    installFakeWorker();
+    const { promise, worker } = startRender();
+    const jobId = worker.posted[0].jobId;
+    const assertion = expect(promise).rejects.toThrow(/Superseded by a newer render/);
+    worker.onmessage?.({
+      data: { kind: 'result', jobId, generationId: getGeneration() + 1, result: {} },
+    } as never);
+    await assertion;
+  });
+
+  it('a matching reply still resolves', async () => {
+    installFakeWorker();
+    const { promise, worker } = startRender();
+    const jobId = worker.posted[0].jobId;
+    worker.onmessage?.({
+      data: { kind: 'result', jobId, generationId: getGeneration(), result: { grid: null } },
+    } as never);
+    await expect(promise).resolves.toEqual({ grid: null });
+  });
+
+  it('cancelAll settles every in-flight job', async () => {
+    installFakeWorker();
+    const { promise } = startRender();
+    const assertion = expect(promise).rejects.toThrow(/Cancelled by generation bump/);
+    cancelAll();
+    await assertion;
   });
 });

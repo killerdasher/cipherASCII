@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store';
 import type { Layer } from '../core/types';
 import { Slider } from './Slider';
@@ -6,7 +7,7 @@ interface PropertyPanelProps {
   layer: Layer | null;
 }
 
-export function PropertyPanel({ layer }: PropertyPanelProps) {
+function PropertyPanelInner({ layer }: PropertyPanelProps) {
   // Hooks run before any early return so React always sees the same hook order.
   const { updateLayer } = useStore();
 
@@ -85,3 +86,5 @@ export function PropertyPanel({ layer }: PropertyPanelProps) {
     </div>
   );
 }
+
+export const PropertyPanel = memo(PropertyPanelInner);

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store';
 
 interface StatusBarProps {
@@ -8,7 +9,7 @@ interface StatusBarProps {
   zoomLevel: number;
 }
 
-export function StatusBar({ isDirty, renderGeneration, pendingRender, cursor, zoomLevel }: StatusBarProps) {
+function StatusBarInner({ isDirty, renderGeneration, pendingRender, cursor, zoomLevel }: StatusBarProps) {
   const { statusMessage } = useStore();
 
   return (
@@ -28,3 +29,5 @@ export function StatusBar({ isDirty, renderGeneration, pendingRender, cursor, zo
     </footer>
   );
 }
+
+export const StatusBar = memo(StatusBarInner);

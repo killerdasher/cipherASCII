@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { useStore, useStoreShallow, selectRenderPresets } from '../store';
 
-export function PresetPanel() {
+function PresetPanelInner() {
   const {
     renderPresets,
     saveRenderPreset,
@@ -117,3 +117,5 @@ function PresetItem({ preset, onApply, onDelete }: { preset: any; onApply: () =>
     </div>
   );
 }
+
+export const PresetPanel = memo(PresetPanelInner);

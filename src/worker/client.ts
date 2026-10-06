@@ -7,6 +7,20 @@
 
 import type { ImageRenderSettings, TextRenderSettings, RenderResult, Raster, EffectsPipeline } from '../core/types';
 
+/**
+ * Raised when a job's generation was superseded before it finished.
+ *
+ * Callers catch this to skip stale results without treating them as failures;
+ * it always settles the awaiting promise, which is what fixes the historic
+ * leak where superseded jobs left `await`s hanging forever.
+ */
+export class StaleRenderError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'StaleRenderError';
+  }
+}
+
 export interface RenderJob {
   id: number;
   generation: number;
@@ -34,7 +48,13 @@ function handleMessage(event: MessageEvent): void {
   const job = pending.get(msg.jobId);
   if (!job) return;
 
-  if (msg.generationId !== job.generation) return;
+  if (msg.generationId !== job.generation) {
+    // The render is for an older document state: drop it *and* settle the
+    // promise so the caller's `finally` block still runs.
+    pending.delete(msg.jobId);
+    job.reject(new StaleRenderError('Superseded by a newer render'));
+    return;
+  }
 
   switch (msg.kind) {
     case 'result':
@@ -66,6 +86,14 @@ function handleError(err: ErrorEvent): void {
 
 export function bumpGeneration(): number {
   generation += 1;
+  // Everything in flight now belongs to an older document state; settle those
+  // promises immediately instead of waiting for replies that will be dropped.
+  for (const [jobId, job] of pending) {
+    if (job.generation < generation) {
+      pending.delete(jobId);
+      job.reject(new StaleRenderError('Superseded by a newer render'));
+    }
+  }
   return generation;
 }
 

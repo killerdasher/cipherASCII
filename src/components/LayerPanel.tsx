@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store';
 import { createGrid } from '../core/grid';
 import type { Layer } from '../core/types';
@@ -7,7 +8,7 @@ interface LayerPanelProps {
   activeLayerId: string | null;
 }
 
-export function LayerPanel({ layers, activeLayerId }: LayerPanelProps) {
+function LayerPanelInner({ layers, activeLayerId }: LayerPanelProps) {
   const { setActiveLayer, addLayer, removeLayer, duplicateLayer, moveLayer } = useStore();
 
   const handleDragStart = (e: React.DragEvent, layerId: string) => {
@@ -84,3 +85,5 @@ export function LayerPanel({ layers, activeLayerId }: LayerPanelProps) {
     </div>
   );
 }
+
+export const LayerPanel = memo(LayerPanelInner);

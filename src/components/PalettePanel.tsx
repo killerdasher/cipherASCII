@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import { useStore, useStoreShallow, selectPalettes, selectActivePaletteId } from '../store';
 import type { Palette } from '../core/types';
 import { createPalette, sortPalette, importPaletteFromText, extractPalette } from '../core/palette/palette';
@@ -42,7 +42,7 @@ function PaletteItem({
   );
 }
 
-export function PalettePanel() {
+function PalettePanelInner() {
   const {
     palettes,
     activePaletteId,
@@ -247,3 +247,5 @@ export function PalettePanel() {
     </div>
   );
 }
+
+export const PalettePanel = memo(PalettePanelInner);

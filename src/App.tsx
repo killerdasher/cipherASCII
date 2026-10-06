@@ -21,7 +21,7 @@ import { PresetPanel } from './components/PresetPanel';
 import { ThemePanel } from './components/ThemePanel';
 import { AsciiControlsPanel } from './components/AsciiControlsPanel';
 import { ImportImageButton, ImageDropZone } from './components/ImportImage';
-import { renderImage, renderText } from './worker/client';
+import { renderImage, renderText, StaleRenderError } from './worker/client';
 import { advanceFrame } from './core/timeline/playback';
 
 const LEFT_TABS: Array<{ id: LeftPanelId; label: string }> = [
@@ -39,6 +39,17 @@ const RIGHT_TABS: Array<{ id: RightPanelId; label: string }> = [
   { id: 'theme', label: 'Theme' },
   { id: 'settings', label: 'Settings' },
 ];
+
+/**
+ * Quiet time required before a render is dispatched.
+ *
+ * Slider drags emit far more events than frames; coalescing them means one
+ * worker render per pause instead of one per input event.
+ */
+const RENDER_DEBOUNCE_MS = 60;
+
+/** Stable value for the status bar's cursor readout (a fresh literal per render defeats memo). */
+const ORIGIN_CURSOR = { x: 0, y: 0 };
 
 function App() {
   const reduceMotion = useReducedMotion();
@@ -128,12 +139,19 @@ const {
     })
   );
 
-  // Auto-render when generation changes
+  // Auto-render when generation changes.
+  //
+  // Two guards keep this cheap under heavy input: the start is debounced so a
+  // burst of slider events coalesces into one worker render, and every result
+  // is checked against the generation it was requested for so a superseded
+  // render can neither overwrite newer content nor clear the pending flag.
   useEffect(() => {
     if (!pendingRender) return;
     const doc = useStore.getState().document;
     const activeLayer = doc.layers.find((l) => l.id === doc.activeLayerId);
     if (!activeLayer) return;
+    const generationAtStart = renderGeneration;
+    const isCurrent = () => useStore.getState().renderGeneration === generationAtStart;
 
     const doRender = async () => {
       const { imageSettings, textSettings } = doc;
@@ -141,21 +159,27 @@ const {
       try {
         if (activeLayer.kind === 'image' && activeLayer.source) {
           const result = await renderImage(activeLayer.source.dataUrl, imageSettings, effectsPipeline);
+          if (!isCurrent()) return;
           applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
           setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
         } else if (activeLayer.kind === 'text') {
           const result = await renderText(activeLayer.text, textSettings);
+          if (!isCurrent()) return;
           applyCommand({ type: 'grid/replace', layerId: activeLayer.id, grid: result.grid });
           setRenderStats({ durationMs: result.stats.durationMs, cells: result.stats.cells });
         }
       } catch (e) {
+        // Superseded renders are expected during fast input, not failures.
+        if (e instanceof StaleRenderError) return;
         console.error('Render failed:', e);
         setStatusMessage(`Render error: ${e instanceof Error ? e.message : 'unknown'}`);
       } finally {
-        setPendingRender(false);
+        if (isCurrent()) setPendingRender(false);
       }
     };
-    doRender();
+
+    const timer = window.setTimeout(doRender, RENDER_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
   }, [renderGeneration, pendingRender]);
 
   // Timeline playback: a rAF loop advancing the playhead at the timeline's
@@ -421,7 +445,7 @@ const {
         isDirty={isDirty}
         renderGeneration={renderGeneration}
         pendingRender={pendingRender}
-        cursor={activeLayer ? { x: 0, y: 0 } : null}
+        cursor={activeLayer ? ORIGIN_CURSOR : null}
         zoomLevel={zoomLevel}
       />
     </div>

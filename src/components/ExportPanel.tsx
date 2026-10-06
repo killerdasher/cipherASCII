@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, memo } from 'react';
 import { useStore } from '../store';
 import { listExporters, runExport } from '../core/export';
 import { drawGridToContext, type CanvasLike } from '../core/export/png';
@@ -29,7 +29,7 @@ const PROGRESS_LABELS: Record<ExportProgress['phase'], string> = {
   done: 'Done',
 };
 
-export function ExportPanel() {
+function ExportPanelInner() {
   const { document, timeline } = useStore();
   const [format, setFormat] = useState('txt');
   const [output, setOutput] = useState('');
@@ -215,3 +215,5 @@ export function ExportPanel() {
     </div>
   );
 }
+
+export const ExportPanel = memo(ExportPanelInner);

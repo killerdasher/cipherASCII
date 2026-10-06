@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import React, { useState } from 'react';
 import { useStoreShallow, selectTheme, selectAvailableThemes } from '../store';
 
-export function ThemePanel() {
+function ThemePanelInner() {
   const {
     theme,
     availableThemes,
@@ -115,3 +116,5 @@ function ThemeCard({ theme, isActive, onActivate }: { theme: any; isActive: bool
     </button>
   );
 }
+
+export const ThemePanel = memo(ThemePanelInner);

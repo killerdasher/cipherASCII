@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import { useStore, useStoreShallow, selectEffectsPipeline, selectCellEffects, selectFxSeed } from '../store';
 import type { EffectSettings, EffectId } from '../core/types';
 import type { CellEffectEntry } from '../core/fx/pipeline';
 import { effectsByCategory as cellEffectsByCategory, getCellEffect } from '../core/fx';
 import { Slider } from './Slider';
 
-export function EffectsPanel() {
+function EffectsPanelInner() {
   const { effectsPipeline, removeEffect, reorderEffects, resetEffectsPipeline, cellEffects, fxSeed } =
     useStoreShallow((s) => ({
       effectsPipeline: selectEffectsPipeline(s),
@@ -341,3 +342,5 @@ function EffectItem({
     </div>
   );
 }
+
+export const EffectsPanel = memo(EffectsPanelInner);
