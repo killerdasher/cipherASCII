@@ -22,6 +22,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/killerdasher/cipherASCII/releases/latest"><img src="https://img.shields.io/badge/download-Windows%20.exe-0078d4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  <a href="https://github.com/killerdasher/cipherASCII/releases/latest"><img src="https://img.shields.io/badge/download-macOS%20.dmg-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS"></a>
+  <a href="https://github.com/killerdasher/cipherASCII/releases/latest"><img src="https://img.shields.io/badge/download-Linux%20.AppImage-fcc624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
+</p>
+
+<p align="center">
   <a href="#downloading"><strong>Download</strong></a> ·
   <a href="#getting-started">Build it</a> ·
   <a href="#features">Features</a> ·
