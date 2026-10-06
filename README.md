@@ -1,9 +1,35 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
+[![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
 [![tests](https://img.shields.io/badge/tests-789%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
+[![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#downloading)
+[![node](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](#getting-started)
+[![electron](https://img.shields.io/badge/electron-44-47848f.svg)](#getting-started)
+[![release](https://img.shields.io/github/v/release/killerdasher/cipherASCII?include_prereleases&label=release)](https://github.com/killerdasher/cipherASCII/releases)
+[![stars](https://img.shields.io/github/stars/killerdasher/cipherASCII?style=flat&logo=github&label=stars)](https://github.com/killerdasher/cipherASCII/stargazers)
+[![forks](https://img.shields.io/github/forks/killerdasher/cipherASCII?style=flat&logo=github&label=forks)](https://github.com/killerdasher/cipherASCII/network/members)
+[![issues](https://img.shields.io/github/issues/killerdasher/cipherASCII?style=flat&logo=github&label=issues)](https://github.com/killerdasher/cipherASCII/issues)
+[![last commit](https://img.shields.io/github/last-commit/killerdasher/cipherASCII?style=flat)](https://github.com/killerdasher/cipherASCII/commits/main)
+[![pull requests](https://img.shields.io/github/issues-pr/killerdasher/cipherASCII?style=flat&logo=github&label=PRs)](https://github.com/killerdasher/cipherASCII/pulls)
+[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+<p align="center">
+  <img src="docs/images/hero.gif" alt="cipherASCII turning a source image into ASCII art: a photo wipes into a character grid inside the editor" width="90%">
+</p>
+
+<p align="center">
+  <a href="#downloading"><strong>Download</strong></a> ·
+  <a href="#getting-started">Build it</a> ·
+  <a href="#features">Features</a> ·
+  <a href="docs/images/pipeline.svg">How it works</a> ·
+  <a href="#themes">Themes</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="USER_GUIDE.md">User guide</a>
+</p>
 
 > Previously **ASCII Art Studio** - the same product, published as
 > **cipherASCII**. Created by [killerdasher](https://github.com/killerdasher).
@@ -14,9 +40,43 @@ timeline, and export to ten formats - eight text/image formats plus MP4 video
 and animated GIF.
 
 Built with React 19 + TypeScript + Vite + Tailwind CSS v3, packaged as an
-Electron desktop app.
+Electron desktop app for **macOS, Windows and Linux**.
 The rendering core (`src/core/**`) is pure TypeScript with no DOM dependency, so
 every pipeline stage runs and is tested in plain Node.
+
+<p align="center">
+  <img src="docs/images/pipeline.svg" alt="Animated diagram: import feeds the render worker (crop, resize, effects, preprocess, luma, map, dither, glyphs) which produces the grid; the grid goes through the cell-effect loop and the compositor to the canvas, then to export" width="100%">
+</p>
+
+## Downloading
+
+Prebuilt installers are attached to every tagged release
+([Releases](https://github.com/killerdasher/cipherASCII/releases)) and built by
+the [release workflow](.github/workflows/release.yml) on all three platforms:
+
+| Platform | Artifact | Notes |
+| --- | --- | --- |
+| macOS | `cipherASCII-<version>-mac-x64.dmg`, `…-mac-arm64.dmg` (plus `.zip`) | Intel and Apple Silicon; unsigned build - on first open use *Right click → Open* |
+| Windows | `cipherASCII-<version>-win-x64.exe` (NSIS installer) | Per-user install, desktop + Start menu shortcuts |
+| Linux | `cipherASCII-<version>-linux-x86_64.AppImage` | `chmod +x` and run |
+
+Every artifact is reproducible from a clean checkout with `npm run dist:mac`,
+`npm run dist:win` or `npm run dist:linux`.
+
+## Getting started
+
+Requires Node.js 20+ (developed on Node 24) and npm 10+.
+
+```bash
+npm install
+npm run dev            # browser dev server at http://localhost:5173
+npm run electron:dev   # desktop app with hot reload
+npm run dist           # build + package for this OS into release/
+npm run dist:win       # Windows NSIS installer (run on Windows, or CI)
+npm run dist:mac       # macOS dmg + zip (run on macOS, or CI)
+npm run dist:linux     # Linux AppImage
+npm run electron:pack  # unpacked executable only (release/win-unpacked/)
+```
 
 - **82 character sets / 3,011 unique characters** (48 of them with 16+ levels)
 - **52 dither algorithms** (error diffusion, ordered, blue-noise, halftone, pattern, edge)
@@ -114,7 +174,7 @@ Implemented and covered by the test suite:
 | Glyph/compositor/colour review: overflow, allocation-free ordering, ANSI-256 fix | working |
 | Benchmarks: `npm run bench` and `npm run bench:engines` with published numbers | working |
 | Drag-and-drop import of PNG, JPEG, WEBP, BMP, GIF (auto-sized grid) | working |
-| Electron packaging (NSIS installer, desktop shortcut) | working |
+| Cross-platform packaging (macOS dmg/zip, Windows NSIS, Linux AppImage, app icon) | working |
 
 **Not implemented yet** (stated honestly rather than faked):
 
@@ -139,17 +199,36 @@ Implemented and covered by the test suite:
   keeps `no-explicit-any` and `exhaustive-deps` off to match the existing
   style.
 
-## Getting started
+## Themes
 
-Requires Node.js 20+ (developed on Node 24) and npm 10+.
+Ten presets, rendered through the real pipeline (`npm run screenshots`
+regenerates every image below - no mockups):
 
-```powershell
-npm install
-npm run dev            # browser dev server at http://localhost:5173
-npm run electron:dev   # desktop app with hot reload
-npm run electron:build # build + package installer into release/
-npm run electron:pack  # unpacked executable only (release/win-unpacked/)
-```
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-medieval.png" width="420" alt="Medieval theme"><br><sub><b>Medieval</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-ditherboy.png" width="420" alt="Dither Boy theme"><br><sub><b>Dither Boy</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-gothic.png" width="420" alt="Gothic Medieval theme"><br><sub><b>Gothic</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-cyber.png" width="420" alt="Cyber Y2K theme"><br><sub><b>Cyber Y2K</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-cafe.png" width="420" alt="Cozy Cafe theme"><br><sub><b>Cafe</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-zelda.png" width="420" alt="Zelda RPG theme"><br><sub><b>Zelda</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-terminal-green.png" width="420" alt="Terminal Green theme"><br><sub><b>Terminal Green</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-terminal-amber.png" width="420" alt="Terminal Amber theme"><br><sub><b>Terminal Amber</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-light.png" width="420" alt="Light theme"><br><sub><b>Light</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-high-contrast.png" width="420" alt="High Contrast theme"><br><sub><b>High Contrast</b></sub></td>
+  </tr>
+</table>
+
+More screens: [docs/screenshots/](docs/screenshots/) and the animated hero
+GIF's poster frame [docs/images/hero.png](docs/images/hero.png).
 
 ## Scripts
 
@@ -167,15 +246,20 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 | `npm run bench:engines` | Cell effects, bridge, compositor/diff, tween and stroke ratios |
 | `npm run demo` | Signature animation demo; `DEMO_SEED=7` / `NO_COLOR=1` / `UPDATE_GOLDEN=1` |
 | `npm run simulations` | Dither fidelity, palette recovery, generation protocol, charset stats |
+| `npm run screenshots` | Regenerate `docs/screenshots/theme-*.png` (one per theme) |
+| `npm run hero` | Regenerate `docs/images/hero.gif` + poster; `NO_ENCODE=1` for frames only |
+| `npm run icons` | Regenerate `public/icon.*` (icns/ico/png) from the brand mark |
 | `npm run build:electron` | Compile `electron/main.ts` |
 | `npm run electron:dev` | Desktop app in dev mode |
 | `npm run electron:build` | Full package (installer + unpacked) |
 | `npm run electron:pack` | Unpacked executable only |
 | `npm run electron:preview` | Run the compiled Electron shell against `dist/` |
+| `npm run dist` / `dist:mac` / `dist:win` / `dist:linux` | electron-builder for the current or a named OS |
 
-`bench`, `bench:engines`, `simulations` and `demo` run through Vitest (`vitest.scripts.config.ts`)
-because the project uses extensionless TypeScript imports, which plain
-`node --experimental-strip-types` cannot resolve.
+`bench`, `bench:engines`, `simulations`, `demo`, `screenshots` and `hero` run
+through Vitest (`vitest.scripts.config.ts`) because the project uses
+extensionless TypeScript imports, which plain `node --experimental-strip-types`
+cannot resolve.
 
 ## Keyboard shortcuts
 
@@ -213,22 +297,25 @@ src/core/            Pure rendering core - never imports UI code
   export/            8 exporters behind one registry + video arg builders
   project/           Project schema + serialization (incl. cell-effect stack)
   theme/             10 app themes
-docs/                Architecture audit + rendering/animation/effects/perf guides
-scripts/             bench, simulations, engines bench, signature demo
-src/worker/          Web Worker render host (generation IDs, cancellation)
-src/services/        Renderer-side ffmpeg.wasm video export
-src/components/      React panels (left/right docks, canvas, modals)
-src/store/           Zustand store (project, view, ui, settings)
-tests/unit/          Unit tests
-tests/fuzz/          Property tests (fixed seeds, reproducible)
-scripts/             bench + simulations (vitest suites), ffmpeg core vendoring
+docs/              Architecture audit + rendering/animation/effects/perf guides
+docs/images/       Hero GIF, poster frame, animated pipeline graph
+docs/screenshots/  One rendered preview per theme (npm run screenshots)
+scripts/           Bench, simulations, signature demo, gallery/hero/icon generators
+scripts/lib/       Shared drawing helpers for the generators (excluded from vitest)
+src/worker/        Web Worker render host (generation IDs, cancellation)
+src/services/      Renderer-side ffmpeg.wasm video export
+src/components/    React panels (left/right docks, canvas, modals)
+src/store/         Zustand store (project, view, ui, settings)
+tests/unit/        Unit tests
+tests/fuzz/        Property tests (fixed seeds, reproducible)
+.github/workflows/ CI (typecheck/lint/test/build) + cross-platform release
 ```
 
 ## Verification
 
 The repo is kept green:
 
-```powershell
+```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
 npm test                          # 789 tests / 39 files, ~8 s
@@ -236,7 +323,9 @@ npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
 npm run simulations               # algorithm simulations
-npm run electron:build            # full package
+npm run screenshots               # rebuild docs/screenshots (visual assets)
+npm run hero                      # rebuild docs/images/hero.gif (visual assets)
+npm run electron:build            # full package (CI also builds mac + win)
 ```
 
 Visual regression lives in `tests/golden/` (text banner, blue-noise image
@@ -269,6 +358,8 @@ Topic guides written against the current code:
 
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md).
 Usage: see [USER_GUIDE.md](USER_GUIDE.md).
+Security reports: see [SECURITY.md](SECURITY.md) - report privately, never as
+a public issue.
 
 ## License
 
