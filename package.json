@@ -25,6 +25,13 @@
     "electron:build": "npm run build && npm run build:electron && electron-builder",
     "electron:pack": "npm run build && npm run build:electron && electron-builder --dir",
     "electron:preview": "npm run build:electron && electron .",
+    "icons": "node scripts/make-icons.mjs",
+    "screenshots": "vitest run --config vitest.scripts.config.ts scripts/theme-gallery.ts",
+    "hero": "vitest run --config vitest.scripts.config.ts scripts/hero-gif.ts",
+    "dist": "npm run build && npm run build:electron && electron-builder --publish never",
+    "dist:win": "npm run build && npm run build:electron && electron-builder --win --publish never",
+    "dist:mac": "npm run build && npm run build:electron && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && npm run build:electron && electron-builder --linux --publish never",
     "lint": "eslint .",
     "bench:engines": "vitest run --config vitest.scripts.config.ts scripts/engines.bench.ts",
     "demo": "vitest run --config vitest.scripts.config.ts scripts/cipher-demo.ts"
@@ -67,8 +74,10 @@
     "wait-on": "^9.5.1"
   },
   "build": {
-    "appId": "com.asciiartstudio.app",
+    "appId": "com.cipherascii.app",
     "productName": "cipherASCII",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "compression": "maximum",
     "directories": {
       "output": "release"
     },
@@ -79,16 +88,74 @@
       "!node_modules/@ffmpeg/core"
     ],
     "win": {
-      "target": "nsis",
-      "icon": "public/icon.png"
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.ico",
+      "legalTrademarks": "cipherASCII"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "cipherASCII",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
-      "target": "dmg",
-      "icon": "public/icon.icns"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/icon.icns",
+      "category": "public.app-category.graphics-design",
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 130
+        },
+        {
+          "x": 410,
+          "y": 130,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "public/icon.png"
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/icon.png",
+      "category": "Graphics",
+      "synopsis": "ASCII art and video creation studio",
+      "desktop": {
+        "entry": {
+          "Name": "cipherASCII",
+          "Comment": "ASCII art and video creation studio",
+          "Categories": "Graphics;Graphics2D;",
+          "StartupWMClass": "cipherascii"
+        }
+      }
     }
   }
 }

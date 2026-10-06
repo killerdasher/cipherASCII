@@ -27,7 +27,9 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 700,
     title: 'cipherASCII',
-    icon: join(__dirname, '../public/icon.png'),
+    // Vite copies `public/` into `dist/`, so the icon ships inside the asar;
+    // `public/` itself is not part of the packaged file set.
+    icon: join(__dirname, '..', 'dist', 'icon.png'),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -788,6 +790,10 @@ function installMenu(): void {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// Windows taskbar/notification identity: without this the shell groups the
+// app under a generic Electron entry in dev builds and in per-user installs.
+if (process.platform === 'win32') app.setAppUserModelId('com.cipherascii.app');
 
 app.whenReady().then(() => {
   installMenu();
