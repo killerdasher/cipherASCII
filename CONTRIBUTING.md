@@ -6,7 +6,7 @@ typecheck` green.
 
 ## Setup
 
-```powershell
+```bash
 npm install
 npm run dev          # browser dev server
 npm run electron:dev # desktop app
@@ -43,7 +43,7 @@ npm run electron:dev # desktop app
 Run the whole verification loop - this is the same sequence CI-equivalent
 checks use locally:
 
-```powershell
+```bash
 npm run typecheck     # tsc --noEmit (renderer) - 0 errors
 npx tsc -p electron/tsconfig.json   # electron main - 0 errors
 npm run lint          # eslint . - 0 errors
@@ -89,5 +89,19 @@ bugs - the source image dimensions, columns, render mode, charset and dither.
 Rendering bugs that only show up in the packaged app are often packaging
 issues: remember that changing `electron/main.ts` requires a full
 `npm run electron:build`, while renderer changes only need `npm run build`.
+
+Changes to the render pipeline, a theme, or the brand mark also touch the
+committed visuals - regenerate them so the README stays truthful:
+
+```bash
+npm run screenshots   # docs/screenshots/theme-*.png (one per theme)
+npm run hero          # docs/images/hero.gif + poster frame
+npm run icons         # public/icon.* from the brand mark
+```
+
+## Security
+
+Report vulnerabilities privately - see [SECURITY.md](SECURITY.md). Do not open
+a public issue for security reports.
 
 More design detail is in [ARCHITECTURE.md](ARCHITECTURE.md).

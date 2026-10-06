@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose an improvement or a new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the gap, not the solution - what are you trying to do today?
+      placeholder: I need to export a palette-swapped variant of every frame without re-running the pipeline...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working (UI surface, API, script, config...).
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you use today, or other designs you rejected.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Rendering / effects pipeline
+        - Animation / scenes / particles
+        - Editor / UI / themes
+        - Export (PNG, MP4, GIF, text formats)
+        - Packaging / platform
+        - Docs / tooling
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions for duplicates
+          required: true
