@@ -1,4 +1,3 @@
-// @ts-nocheck - palette helpers predate strict typing (legacy quantizer code)
 /**
  * Palette System - color palette extraction, mapping, and management.
  *

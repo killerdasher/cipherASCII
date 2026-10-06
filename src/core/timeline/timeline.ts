@@ -1,4 +1,3 @@
-// @ts-nocheck - timeline model predates strict typing (keyframe generics)
 /**
  * Timeline / Animation System - video and animation support with keyframes.
  *

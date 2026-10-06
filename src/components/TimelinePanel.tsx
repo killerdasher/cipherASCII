@@ -1,4 +1,3 @@
-// @ts-nocheck - timeline UI still uses implicit any while it is migrated
 import { memo } from 'react';
 import React, { useState } from 'react';
 import { useStore, useStoreShallow, selectTimeline, selectActiveTimelineId } from '../store';

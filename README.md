@@ -129,9 +129,9 @@ Implemented and covered by the test suite:
   (raster, applied in the worker), not a real-time shader. The toolbar **CRT**
   button adds a display-only bloom on the editor canvas (a 2D self-composite,
   not WebGL).
-- Debt: four files still carry `@ts-nocheck` (`core/effects/pipeline.ts`,
-  `core/palette/palette.ts`, `core/timeline/timeline.ts`,
-  `components/TimelinePanel.tsx`).
+- No `@ts-nocheck` anywhere: the four files that used to carry one
+  (`effects/pipeline.ts`, `palette/palette.ts`, `timeline/timeline.ts`,
+  `TimelinePanel.tsx`) type-check clean under `strict` on their own.
 - Lint runs clean (`npm run lint`), but `noUnusedLocals` means the config
   keeps `no-explicit-any` and `exhaustive-deps` off to match the existing
   style.

@@ -111,7 +111,8 @@ UI event
 15. **Duplicated types**: `EffectId`/`EffectMeta`/`EffectSettings`/
     `EffectsPipeline` exist in both `types.ts:650-689` and `pipeline.ts:12-47`;
     `Theme`/`ThemeColors` in both `types.ts:774-840` and `theme.ts:8-88`.
-    `pipeline.ts:1` is `@ts-nocheck`.
+    `pipeline.ts:1` was `@ts-nocheck` (directive removed; the duplication
+    itself is still there).
 16. `ProceduralRenderRequest` is in the request union (`types.ts:599-604`) but
     the worker has no `kind:'procedural'` branch — it would silently fall
     through (`render.worker.ts:39,59,79`).

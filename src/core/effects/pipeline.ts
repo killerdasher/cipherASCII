@@ -1,4 +1,3 @@
-// @ts-nocheck - legacy params are loosely typed Record<string, unknown>
 /**
  * Effects Pipeline - stackable post-processing effects like Dither Boy.
  *
@@ -8,6 +7,11 @@
 
 import type { Raster } from '../types';
 import { applyRasterEffect, pixelNoise } from './imageEffects';
+
+/** Effect params are a loose record; read one as a finite number. */
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
 
 export type EffectId =
   | 'none'
@@ -289,7 +293,8 @@ async function applySingleEffect(
 
   switch (id) {
     case 'vignette': {
-      const { radius = 0.5, feather = 0.3 } = params;
+      const radius = num(params.radius, 0.5);
+      const feather = num(params.feather, 0.3);
       const cx = width / 2;
       const cy = height / 2;
       for (let y = 0; y < height; y++) {
@@ -307,8 +312,9 @@ async function applySingleEffect(
       break;
     }
     case 'filmGrain': {
-      const { strength = 0.15, size = 1, monochrome = true } = params;
-      const cell = Math.max(1, Math.round(Number(size) || 1));
+      const strength = num(params.strength, 0.15);
+      const monochrome = params.monochrome ?? true;
+      const cell = Math.max(1, Math.round(num(params.size, 1)));
       const seed = frame * 7919 + 41;
       const grain = new Uint8ClampedArray(width * height);
       for (let y = 0; y < height; y++) {
@@ -338,7 +344,8 @@ async function applySingleEffect(
       break;
     }
     case 'scanlines': {
-      const { spacing = 2, opacity = 0.3 } = params;
+      const spacing = Math.max(1, Math.round(num(params.spacing, 2)));
+      const opacity = num(params.opacity, 0.3);
       for (let y = 0; y < height; y += spacing) {
         const rowStart = y * width * 4;
         const rowEnd = Math.min(rowStart + width * 4, data.length);
