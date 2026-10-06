@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import CommandPalette from './components/CommandPalette';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore, useStoreShallow, selectDocument, selectActiveLayer, selectLayers, selectCanvasSettings, selectIsDirty, selectRenderGeneration, selectPendingRender, selectActivePanel, selectActiveRightPanel, selectShowGrid, selectShowGuides, selectCrtGlow, selectGpuPreview, selectZoomLevel, selectTheme, selectTool } from './store';
 import type { LeftPanelId, RightPanelId } from './store';
@@ -185,6 +186,10 @@ const {
   // Timeline playback: a rAF loop advancing the playhead at the timeline's
   // fps. Only the timeline slice changes - the document and the render
   // generation are untouched (seeking is pure view state).
+  // Command palette (Ctrl+K). Kept as local UI state — it never touches the
+  // document, so opening it does not dirty the project.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
   const timelinePlaying = useStore((s) => s.timeline?.playing ?? false);
   const timelineFps = useStore((s) => s.timeline?.fps ?? 30);
   useEffect(() => {
@@ -254,6 +259,10 @@ const {
         e.preventDefault();
         newDocument();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('ascii:open'));
+      }
       if (e.key === ' ') {
         e.preventDefault();
         setTerminalMode(!terminalMode);
@@ -274,6 +283,18 @@ const {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [terminalMode]);
+
+  // The palette shortcut lives outside `handleKeyDown` on purpose: it must
+  // open even while an input is focused (that is where users reach for it).
+  useEffect(() => {
+    const openPalette = (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) return;
+      e.preventDefault();
+      setPaletteOpen((open) => !open);
+    };
+    window.addEventListener('keydown', openPalette);
+    return () => window.removeEventListener('keydown', openPalette);
+  }, []);
 
   // Native File/Edit/View menu (see electron/main.ts) -> the same actions the
   // toolbar exposes. `electronAPI` only exists inside the packaged app.
@@ -338,6 +359,7 @@ const {
             <NewProjectModal onCreate={newDocument} />
             <OpenProjectModal onOpen={setDocument} />
             <SaveProjectModal document={document} isDirty={isDirty} />
+            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
           </>
         }
       />

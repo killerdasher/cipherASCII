@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-707%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-728%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -170,7 +170,9 @@ because the project uses extensionless TypeScript imports, which plain
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+N` | New document |
+| `Ctrl+O` | Open project |
 | `Ctrl+S` | Save project (`.aap` or `.json`) when there are unsaved changes |
+| `Ctrl+K` | Command palette (every panel, tool, toggle, effect and theme) |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | `Ctrl+T` | Left dock: Timeline |
 | `Ctrl+P` | Right dock: Palette |
@@ -217,7 +219,7 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 707 tests / 34 files, ~6 s
+npm test                          # 728 tests / 35 files, ~7 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
