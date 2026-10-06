@@ -2200,3 +2200,42 @@ input, select, textarea {
   color: #6b7280;
   border-top: 1px solid var(--border);
 }
+
+/* --- Debug overlay (perf) ------------------------------------------------ */
+.debug-overlay {
+  position: fixed;
+  right: 14px;
+  bottom: 48px;
+  z-index: 900;
+  min-width: 210px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #d4d4d8;
+  background: rgba(22, 22, 29, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.debug-title {
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+.debug-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.debug-row span {
+  color: #6b7280;
+}
+.debug-row b {
+  font-weight: 600;
+  color: inherit;
+}

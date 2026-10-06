@@ -164,7 +164,42 @@ These are real and documented rather than papered over (they come from
    (`store/index.ts`) — cheap per event, but a structural compare would be
    cheaper still.
 
-## 7. Reproducing
+## 7. Quality modes, adaptive control and the debug overlay
+
+Not every machine holds 60 fps, and a fixed "performance mode" punishes fast
+machines. `src/core/perf/` adds a budget ladder plus a controller that walks it:
+
+| Tier | Target | Cell-effect updates | Particles | CRT / subtexture |
+| --- | --- | --- | --- | --- |
+| `high` | 16.7 ms (60 fps) | 60 Hz | 4,000 | on |
+| `balanced` | 33.4 ms (30 fps) | 30 Hz | 2,000 | on |
+| `low` | 50 ms | 20 Hz | 800 | off |
+| `emergency` | 100 ms | 10 Hz | 200 | off |
+
+- **Mode** is a user choice in *Settings → Performance* (or Ctrl+K →
+  `Quality mode: …`): `auto`, `high`, `balanced`, `low`. Fixed modes pin a
+  tier; `auto` follows the controller.
+- **Controller** (`adaptive.ts`) keeps an EMA of frame time (α = 0.15) and
+  steps **down** after 15 consecutive frames above `target × 1.35`, steps
+  **up** only after 120 consecutive frames below `target × 0.7`, and waits a
+  90-frame cooldown after any step — fast reaction down, slow proof up, no
+  oscillation. Levels are clamped to 0..3.
+- **What the budget actually gates**: the editor's effect loop caps how *often*
+  effects update while still passing the accumulated dt, so an animation keeps
+  its real duration and simply takes fewer, bigger steps when the machine is
+  behind; and the two expensive display extras (CRT self-composite, subtexture
+  `getImageData` round-trip) are skipped below `balanced`.
+- **Debug overlay** (Ctrl+K → *Toggle debug overlay*, or Settings): FPS,
+  smoothed frame time, active tier/level, effect Hz and count, last worker
+  render (ms + cells), render generation and grid size — published at 2 Hz,
+  never per animation frame.
+
+Purity: `quality.ts`, `adaptive.ts` and `stats.ts` are DOM-free, so the ladder
+and the controller are covered by `tests/unit/perf.test.ts` (step down,
+cooldown, recovery, noise rejection, no mutation).
+
+## 8. Reproducing
+
 
 ```bash
 npm ci

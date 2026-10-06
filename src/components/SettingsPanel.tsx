@@ -23,7 +23,16 @@ interface SettingsPanelProps {
 }
 
 function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: SettingsPanelProps) {
-  const { setImageSettings, setTextSettings, setCanvasSettings, applyCanvasPreset } = useStore();
+  const {
+    setImageSettings,
+    setTextSettings,
+    setCanvasSettings,
+    applyCanvasPreset,
+    setQualityMode,
+    toggleDebugOverlay,
+    qualityMode,
+    debugOverlay,
+  } = useStore();
 
   return (
     <div className="settings-panel">
@@ -195,6 +204,30 @@ function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: Set
           </div>
         </>
       )}
+
+      <h3>Performance</h3>
+      <div className="prop-row">
+        <label>Quality mode:</label>
+        <select value={qualityMode} onChange={(e) => setQualityMode(e.target.value as typeof qualityMode)}>
+          <option value="auto">Auto (adaptive)</option>
+          <option value="high">High (60 Hz effects)</option>
+          <option value="balanced">Balanced (30 Hz)</option>
+          <option value="low">Low (20 Hz, no extras)</option>
+        </select>
+      </div>
+      <div className="prop-row">
+        <label htmlFor="setting-debug-overlay">Debug overlay:</label>
+        <input
+          id="setting-debug-overlay"
+          type="checkbox"
+          checked={debugOverlay}
+          onChange={() => toggleDebugOverlay()}
+        />
+      </div>
+      <p className="text-xs text-muted">
+        Auto watches frame time and steps the effect update rate down (60 → 30 → 20 → 10 Hz) when it
+        falls behind, then climbs back once it is comfortably fast again.
+      </p>
 
       <div className="mt-4 flex items-center gap-3 border-t border-line pt-3">
         <CipherAsciiLogo size={34} />

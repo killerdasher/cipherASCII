@@ -7,6 +7,8 @@ import { applyTimelineToDocument, getOnionSkinFrames } from '../core/timeline/ti
 import { timelineHasAnimation } from '../core/timeline/playback';
 import { useStore } from '../store';
 import { cellFxRuntime } from '../core/fx';
+import { resolveBudget } from '../core/perf/quality';
+import { adaptiveFps, createAdaptive, observeFrame } from '../core/perf/adaptive';
 import { PixiViewport } from './PixiViewport';
 
 interface EditorCanvasProps {
@@ -147,6 +149,13 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   // Live cell-effect output. `null` means "paint the plain composed document".
   const [fxGrid, setFxGrid] = useState<AsciiGrid | null>(null);
 
+  // Adaptive quality: smoothed frame time drives a 0..3 level (only consulted
+  // when qualityMode is `auto`). A ref so the paint/effect paths can record
+  // samples without re-rendering the component.
+  const qualityMode = useStore((s) => s.qualityMode);
+  const debugOverlay = useStore((s) => s.debugOverlay);
+  const adaptiveRef = useRef(createAdaptive());
+
   // Animated documents: while the timeline has keyframes the editor composes
   // the frame under the playhead instead of the raw document. Pure - the
   // store's document is never touched by seeking or playing.
@@ -185,6 +194,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const paintStart = performance.now();
 
     // Resolve every canvas colour from the active theme so switching themes
     // restyles the preview along with the rest of the application.
@@ -270,8 +280,9 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     // Subtexture mask: multiplied over the painted pixels so the ASCII reads
     // as if seen through an LCD/CRT screen. Same math as the PNG export, and
     // skipped on canvases too large for a getImageData round-trip.
+    const budget = resolveBudget(qualityMode, adaptiveRef.current.level);
     const subtexture = document.canvas.subtexture;
-    if (shouldApplySubtexture(subtexture, canvas.width, canvas.height)) {
+    if (budget.fullEffects && shouldApplySubtexture(subtexture, canvas.width, canvas.height)) {
       const masked = ctx.getImageData(0, 0, canvas.width, canvas.height);
       applySubtexture(masked.data, masked.width, masked.height, subtexture);
       ctx.putImageData(masked, 0, 0);
@@ -281,7 +292,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     // drawImage keeps this cheap regardless of how many glyphs are drawn.
     // Skipped while the GPU viewport is mounted - the CRT shader runs there,
     // and baking the 2D bloom too would double it.
-    if (crtGlow && !gpuPreview) {
+    if (crtGlow && budget.fullEffects && !gpuPreview) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.55;
@@ -292,7 +303,11 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
 
     // Hand the finished raster to the GPU viewport (if one is watching).
     canvas.dataset.rasterRev = String(++rasterRev);
-  }, [composedGrid, fxGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview]);
+
+    // Paint is the dominant per-frame cost, so it is what the adaptive
+    // controller listens to (the effect loop reports its own cost too).
+    adaptiveRef.current = observeFrame(adaptiveRef.current, performance.now() - paintStart, budget.targetMs);
+  }, [composedGrid, fxGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview, qualityMode]);
 
   // Cell-effect playback: advance the runtime at frame rate and repaint only
   // while it can still change pixels. The loop stops itself once every
@@ -306,17 +321,30 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     let raf = 0;
     let alive = true;
     let last = performance.now();
+    let accumulated = 0;
     const tick = (now: number) => {
       if (!alive) return;
       const dt = Math.min(64, Math.max(1, now - last));
       last = now;
-      const next = cellFxRuntime.frame(composedGrid, dt);
-      if (next) {
-        setFxGrid(next);
-      } else if (!cellFxRuntime.needsFrames) {
-        setFxGrid(null);
-        return;
+
+      const budget = resolveBudget(qualityMode, adaptiveRef.current.level);
+      const frameStart = performance.now();
+      // The budget caps how *often* effects update; dt is accumulated across
+      // skipped ticks, so an animation keeps real-time duration and simply
+      // takes fewer, larger steps while the machine is behind.
+      accumulated += dt;
+      if (accumulated >= 1000 / budget.effectHz) {
+        const advance = accumulated;
+        accumulated = 0;
+        const next = cellFxRuntime.frame(composedGrid, advance);
+        if (next) {
+          setFxGrid(next);
+        } else if (!cellFxRuntime.needsFrames) {
+          setFxGrid(null);
+          return;
+        }
       }
+      adaptiveRef.current = observeFrame(adaptiveRef.current, performance.now() - frameStart, budget.targetMs);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -324,7 +352,36 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       alive = false;
       cancelAnimationFrame(raf);
     };
-  }, [cellEffects, fxSeed, composedGrid]);
+  }, [cellEffects, fxSeed, composedGrid, qualityMode]);
+
+  // Debug overlay: publish a snapshot at ~2 Hz (never per animation frame) so
+  // watching the numbers costs nothing while they are hidden.
+  useEffect(() => {
+    if (!debugOverlay) {
+      if (useStore.getState().perfStats) useStore.getState().setPerfStats(null);
+      return;
+    }
+    const publish = () => {
+      const st = useStore.getState();
+      const adaptive = adaptiveRef.current;
+      const budget = resolveBudget(st.qualityMode, adaptive.level);
+      st.setPerfStats({
+        fps: adaptiveFps(adaptive),
+        frameMs: adaptive.emaMs ?? 0,
+        level: adaptive.level,
+        effectHz: budget.effectHz,
+        effects: st.cellEffects.length,
+        renderMs: st.lastRenderStats?.durationMs ?? null,
+        renderCells: st.lastRenderStats?.cells ?? null,
+        generation: st.renderGeneration,
+        gridWidth: composedGrid.width,
+        gridHeight: composedGrid.height,
+      });
+    };
+    publish();
+    const id = window.setInterval(publish, 500);
+    return () => window.clearInterval(id);
+  }, [debugOverlay, composedGrid]);
 
   const cellAt = (e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const rect = e.currentTarget.getBoundingClientRect();

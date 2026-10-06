@@ -92,6 +92,22 @@ export function buildPaletteCommands(): CommandDef[] {
   add({ id: 'view.toggle.crt', title: 'Toggle CRT glow', group: 'View', keywords: ['bloom phosphor'], run: () => s().toggleCrtGlow() });
   add({ id: 'view.toggle.gpu', title: 'Toggle GPU preview', group: 'View', keywords: ['pixi webgl shader'], run: () => s().toggleGpuPreview() });
   add({ id: 'view.toggle.terminal', title: 'Toggle terminal preview', group: 'View', shortcut: 'Space', keywords: ['ansi preview'], run: () => s().setTerminalMode(!s().terminalMode) });
+  add({
+    id: 'view.toggle.debug',
+    title: 'Toggle debug overlay',
+    group: 'View',
+    keywords: ['fps', 'perf', 'stats', 'frame time'],
+    run: () => s().toggleDebugOverlay(),
+  });
+  for (const mode of ['auto', 'high', 'balanced', 'low'] as const) {
+    add({
+      id: `quality.${mode}`,
+      title: `Quality mode: ${mode[0].toUpperCase()}${mode.slice(1)}`,
+      group: 'View',
+      keywords: ['performance', 'adaptive', 'fps', 'budget', mode],
+      run: () => s().setQualityMode(mode),
+    });
+  }
 
   // --- View: zoom ----------------------------------------------------------
   add({ id: 'view.zoom.in', title: 'Zoom in', group: 'View', keywords: ['larger scale'], run: () => s().setZoom(s().zoomLevel * 1.25) });

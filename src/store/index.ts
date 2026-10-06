@@ -6,6 +6,8 @@
  */
 
 import { create } from 'zustand';
+import type { QualityMode } from '../core/perf/quality';
+import type { PerfStats } from '../core/perf/stats';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import type {
@@ -116,6 +118,18 @@ export interface AppState {
   gpuPreview: boolean;
   zoomLevel: number;
   statusMessage: string;
+
+  // Performance
+  /**
+   * `auto` follows the adaptive quality ladder (see `src/core/perf/`), the
+   * other modes pin the budget. Pure view state - never marks the document
+   * dirty.
+   */
+  qualityMode: QualityMode;
+  /** Debug overlay: FPS, frame time, quality level, render stats. */
+  debugOverlay: boolean;
+  /** Latest frame samples for the overlay; null until the first sample. */
+  perfStats: PerfStats | null;
 
   // Viewport & Selection
   viewport: ViewportState;
@@ -236,6 +250,11 @@ export interface AppState {
 
   setTerminalMode: (enabled: boolean) => void;
   setTerminalSize: (cols: number, rows: number) => void;
+
+  setQualityMode: (mode: QualityMode) => void;
+  toggleDebugOverlay: () => void;
+  /** Replaced (not merged) by the editor at ~2 Hz while the overlay is up. */
+  setPerfStats: (stats: PerfStats | null) => void;
 }
 
 /**
@@ -324,6 +343,10 @@ export const useStore = create<AppState>()(
       gpuPreview: false,
       zoomLevel: 1,
       statusMessage: 'Ready',
+
+      qualityMode: 'auto',
+      debugOverlay: false,
+      perfStats: null,
 
       viewport: { x: 0, y: 0, zoom: 1, rotation: 0 },
       selection: { type: 'rectangle', bounds: null, layerIds: [] },
@@ -855,6 +878,10 @@ export const useStore = create<AppState>()(
       setSelection: (selection) => set((s) => ({ selection: { ...s.selection, ...selection } })),
       setTool: (tool) => set((s) => ({ tool: { ...s.tool, ...tool } })),
 
+      setQualityMode: (mode) => set({ qualityMode: mode }),
+      toggleDebugOverlay: () => set((s) => ({ debugOverlay: !s.debugOverlay })),
+      setPerfStats: (stats) => set({ perfStats: stats }),
+
       setTerminalMode: (enabled) => set({ terminalMode: enabled }),
       setTerminalSize: (cols, rows) => set({ terminalCols: cols, terminalRows: rows }),
     };
@@ -896,6 +923,9 @@ export const selectAvailableThemes = (state: AppState) => state.availableThemes;
 export const selectActivePanel = (state: AppState) => state.activePanel;
 export const selectActiveRightPanel = (state: AppState) => state.activeRightPanel;
 export const selectShowGrid = (state: AppState) => state.showGrid;
+export const selectQualityMode = (state: AppState) => state.qualityMode;
+export const selectDebugOverlay = (state: AppState) => state.debugOverlay;
+export const selectPerfStats = (state: AppState) => state.perfStats;
 export const selectShowGuides = (state: AppState) => state.showGuides;
 export const selectCrtGlow = (state: AppState) => state.crtGlow;
 export const selectGpuPreview = (state: AppState) => state.gpuPreview;

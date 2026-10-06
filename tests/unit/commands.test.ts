@@ -174,6 +174,24 @@ describe('buildPaletteCommands', () => {
     expect(useStore.getState().showGrid).toBe(before);
   });
 
+  it('has performance commands for every quality mode and the overlay', () => {
+    for (const mode of ['auto', 'high', 'balanced', 'low']) {
+      expect(commands.some((c) => c.id === `quality.${mode}`)).toBe(true);
+    }
+    expect(commands.some((c) => c.id === 'view.toggle.debug')).toBe(true);
+
+    const modeBefore = useStore.getState().qualityMode;
+    const overlayBefore = useStore.getState().debugOverlay;
+    commands.find((c) => c.id === 'quality.low')!.run();
+    expect(useStore.getState().qualityMode).toBe('low');
+    commands.find((c) => c.id === 'view.toggle.debug')!.run();
+    expect(useStore.getState().debugOverlay).toBe(!overlayBefore);
+    commands.find((c) => c.id === 'view.toggle.debug')!.run();
+    expect(useStore.getState().debugOverlay).toBe(overlayBefore);
+    commands.find((c) => c.id === `quality.${modeBefore}`)!.run();
+    expect(useStore.getState().qualityMode).toBe(modeBefore);
+  });
+
   it('runs: adding a cell effect appends it to the stack', () => {
     const before = useStore.getState().cellEffects.length;
     commands.find((c) => c.id === 'cell.add.cipherlock')!.run();

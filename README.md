@@ -1,7 +1,7 @@
 # cipherASCII
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-728%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-744%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -37,6 +37,11 @@ every pipeline stage runs and is tested in plain Node.
 - **Layered rendering**: interned glyphs, structure-of-arrays planes, a
   z-ordered compositor with blend modes and standard alpha, and a dirty-region
   diff that picks `none`/`diff`/`full` per frame
+- **Command palette** (`Ctrl+K`): every panel, tool, toggle, quality mode,
+  theme and all 45 cell effects, ranked by a tested matcher
+- **Adaptive performance**: Auto/Balanced/Low quality modes driven by a
+  frame-time controller (hysteresis + cooldown), plus a debug overlay with
+  FPS, frame time, tier and render stats (`docs/PERFORMANCE.md`)
 - **9 tone-mapping strategies** (luminance, brightness, contrast, local contrast, edge, ...)
 - **10 export formats**: TXT, ASC, ANSI, JSON, HTML, SVG, AAP, PNG, **MP4**, **GIF**
 - **10 themes**: Medieval, Dither Boy, Terminal Green, Terminal Amber, Light,
@@ -100,6 +105,8 @@ Implemented and covered by the test suite:
 | Layered canvas core: glyph interning, planes, compositor, dirty diff | working |
 | Animation core: 26 easings, tweens, sequences, motion paths, scenes | working |
 | Signature demo + golden-frame visual regression (`npm run demo`) | working |
+| Command palette (Ctrl+K) with tested ranking + registry-driven sections | working |
+| Quality modes + adaptive controller + debug overlay (Settings > Performance) | working |
 | Benchmarks: `npm run bench` and `npm run bench:engines` with published numbers | working |
 | Drag-and-drop import of PNG, JPEG, WEBP, BMP, GIF (auto-sized grid) | working |
 | Electron packaging (NSIS installer, desktop shortcut) | working |
@@ -219,7 +226,7 @@ The repo is kept green:
 ```powershell
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 728 tests / 35 files, ~7 s
+npm test                          # 744 tests / 36 files, ~7 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
