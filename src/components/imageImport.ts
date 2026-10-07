@@ -75,7 +75,7 @@ export interface ImportTarget {
  */
 export async function sampleImageLuminance(
   dataUrl: string,
-  columns = 120,
+  columns = 100,
 ): Promise<{ luma: Float32Array; width: number; height: number }> {
   const response = await fetch(dataUrl);
   const bitmap = await createImageBitmap(await response.blob());

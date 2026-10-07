@@ -223,6 +223,21 @@ function entropyTone(hist: Float64Array, total: number, levels: number): number 
   return norm > 0 ? clamp01(h / norm) : 0;
 }
 
+
+/**
+ * Total order over recommendations: score descending, then charset id and
+ * dither registration rank. Being a total order (not a stable-sort reliance)
+ * makes the ranking identical however results are chunked and merged.
+ */
+function compareRecommendations(dithers: readonly DitherId[]) {
+  const rank = new Map<DitherId, number>(dithers.map((d, i) => [d, i]));
+  return (a: RenderRecommendation, b: RenderRecommendation): number => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.charsetId !== b.charsetId) return a.charsetId < b.charsetId ? -1 : 1;
+    return (rank.get(a.ditherId) ?? 999) - (rank.get(b.ditherId) ?? 999);
+  };
+}
+
 /**
  * Rank charset x dither combinations for a luminance plane.
  * Throws RangeError when `luma.length !== width * height`.
@@ -258,72 +273,96 @@ export function analyzeLuma(
   const inkBlur = boxBlur(ink, width, height, 1);
   const inkGrad = gradientEnergy(inkBlur, width, height);
 
-  const results: RenderRecommendation[] = [];
+  // Metrics depend only on (dither, ladder length): the reconstruction uses
+  // level indices, not glyphs. Score each pair once and fan the result out
+  // to every charset of that length - |distinct lengths| x |dithers| heavy
+  // runs instead of |charsets| x |dithers|.
+  const byLength = new Map<number, CharsetDescription[]>();
   for (const charset of charsets) {
-    const chars = [...charset.chars];
-    const len = chars.length;
-    const legibility = clamp01(16 / len);
-    for (const algorithm of dithers) {
-      const dithered =
-        algorithm === 'none'
-          ? ink
-          : applyDither(
-              ink,
-              width,
-              height,
-              { algorithm, strength: 1, serpentine: false, matrixSize: 8 },
-              len,
-            );
+    const len = [...charset.chars].length;
+    const group = byLength.get(len);
+    if (group) group.push(charset);
+    else byLength.set(len, [charset]);
+  }
+  const lengths = [...byLength.keys()].sort((a, b) => a - b);
 
-      const recon = new Float32Array(n);
-      const hist = new Float64Array(len);
-      const denom = len - 1;
-      for (let i = 0; i < n; i++) {
-        const idx = inkToIndex(dithered[i], len, 0, 1);
-        recon[i] = 1 - idx / denom;
-        hist[idx]++;
-      }
+  interface LadderMetrics {
+    sharp: number;
+    soft: number;
+    deflat: number;
+    tone: number;
+  }
 
-      const reconBlur = boxBlur(recon, width, height, 1);
-      const reconGrad = gradientEnergy(reconBlur, width, height);
+  const scoreLadder = (algorithm: DitherId, len: number): LadderMetrics => {
+    const dithered =
+      algorithm === 'none'
+        ? ink
+        : applyDither(
+            ink,
+            width,
+            height,
+            { algorithm, strength: 1, serpentine: false, matrixSize: 8 },
+            len,
+          );
 
-      let penSum = 0;
-      let penCells = 0;
-      for (let i = 0; i < n; i++) {
-        const gOrig = inkGrad[i];
-        if (gOrig <= 1e-5) continue; // Already flat: dither noise is neutral.
-        penSum += clamp01((gOrig - reconGrad[i]) / gOrig);
-        penCells++;
-      }
+    const recon = new Float32Array(n);
+    const hist = new Float64Array(len);
+    const denom = len - 1;
+    for (let i = 0; i < n; i++) {
+      const idx = inkToIndex(dithered[i], len, 0, 1);
+      recon[i] = 1 - idx / denom;
+      hist[idx]++;
+    }
 
-      const sharp = clamp01(1 - perceptualError(rmse(ink, recon), 0.05));
-      const soft = clamp01(1 - perceptualError(rmse(inkBlur, reconBlur), 0.04));
-      const deflat = clamp01(1 - (penCells > 0 ? penSum / penCells : 0));
-      const tone = entropyTone(hist, n, len);
+    const reconBlur = boxBlur(recon, width, height, 1);
+    const reconGrad = gradientEnergy(reconBlur, width, height);
+
+    let penSum = 0;
+    let penCells = 0;
+    for (let i = 0; i < n; i++) {
+      const gOrig = inkGrad[i];
+      if (gOrig <= 1e-5) continue; // Already flat: dither noise is neutral.
+      penSum += clamp01((gOrig - reconGrad[i]) / gOrig);
+      penCells++;
+    }
+
+    return {
+      sharp: clamp01(1 - perceptualError(rmse(ink, recon), 0.05)),
+      soft: clamp01(1 - perceptualError(rmse(inkBlur, reconBlur), 0.04)),
+      deflat: clamp01(1 - (penCells > 0 ? penSum / penCells : 0)),
+      tone: entropyTone(hist, n, len),
+    };
+  };
+
+  const results: RenderRecommendation[] = [];
+  for (const algorithm of dithers) {
+    for (const len of lengths) {
+      const m = scoreLadder(algorithm, len);
+      const legibility = clamp01(16 / len);
       const score = clamp01(
-        0.3 * soft + 0.2 * sharp + 0.2 * deflat + 0.1 * tone + 0.2 * legibility,
+        0.3 * m.soft + 0.2 * m.sharp + 0.2 * m.deflat + 0.1 * m.tone + 0.2 * legibility,
       );
-
-      results.push({
-        charsetId: charset.id,
-        charsetLabel: charset.label,
-        chars: charset.chars,
-        ditherId: algorithm,
-        ditherLabel: ditherLabel(algorithm),
-        score: round4(score),
-        metrics: {
-          sharp: round4(sharp),
-          soft: round4(soft),
-          deflat: round4(deflat),
-          tone: round4(tone),
-          legibility: round4(legibility),
-        },
-      });
+      for (const charset of byLength.get(len)!) {
+        results.push({
+          charsetId: charset.id,
+          charsetLabel: charset.label,
+          chars: charset.chars,
+          ditherId: algorithm,
+          ditherLabel: ditherLabel(algorithm),
+          score: round4(score),
+          metrics: {
+            sharp: round4(m.sharp),
+            soft: round4(m.soft),
+            deflat: round4(m.deflat),
+            tone: round4(m.tone),
+            legibility: round4(legibility),
+          },
+        });
+      }
     }
   }
 
-  // Stable descending sort: ties keep the registration order (deterministic).
-  results.sort((a, b) => b.score - a.score);
+  results.sort(compareRecommendations(dithers));
   return { recommendations: results.slice(0, limit), traits };
 }
 
@@ -352,7 +391,7 @@ export async function analyzeLumaChunked(
     if (i + CHUNK < charsets.length) await yieldFn();
   }
   const limit = Math.max(1, options.limit ?? 6);
-  collected.sort((a, b) => b.score - a.score);
+  collected.sort(compareRecommendations(options.dithers ?? ANALYZER_DITHERS));
   return {
     recommendations: collected.slice(0, limit),
     traits: traits ?? { contrast: 0, detail: 0, bandingRisk: 0 },

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useStore } from '../store';
 import { CipherAsciiLogo } from './CipherAsciiLogo';
 import { Slider } from './Slider';
@@ -15,6 +15,8 @@ import {
   matchCanvasPreset,
   type CanvasPresetId,
 } from '../core/canvasPresets';
+import { computeAutoLevels } from '../core/image/autoLevels';
+import { sampleImageLuminance } from './imageImport';
 
 interface SettingsPanelProps {
   imageSettings: ImageRenderSettings;
@@ -33,6 +35,33 @@ function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: Set
     qualityMode,
     debugOverlay,
   } = useStore();
+  const [autoLevelsBusy, setAutoLevelsBusy] = useState(false);
+
+  const runAutoLevels = async () => {
+    const state = useStore.getState();
+    const layer = state.document.layers.find((l) => l.id === state.document.activeLayerId);
+    if (!layer || layer.kind !== 'image' || !layer.source) {
+      state.setStatusMessage('Auto levels needs an active image layer.');
+      return;
+    }
+    setAutoLevelsBusy(true);
+    try {
+      const { luma } = await sampleImageLuminance(layer.source.dataUrl);
+      const levels = computeAutoLevels(luma);
+      if (!levels.fitted) {
+        state.setStatusMessage('Auto levels: image is flat - nothing to stretch.');
+        return;
+      }
+      setImageSettings({ preprocess: { ...imageSettings.preprocess, ...levels.patch } });
+      state.setStatusMessage(
+        `Auto levels: p2 ${levels.p2.toFixed(2)}, p98 ${levels.p98.toFixed(2)}, stretch x${levels.stretch.toFixed(1)}`,
+      );
+    } catch {
+      state.setStatusMessage('Auto levels failed for this image.');
+    } finally {
+      setAutoLevelsBusy(false);
+    }
+  };
 
   return (
     <div className="settings-panel">
@@ -84,6 +113,17 @@ function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: Set
       <div className="prop-row">
         <label>Invert:</label>
         <input type="checkbox" checked={imageSettings.output.invert} onChange={(e) => setImageSettings({ output: { ...imageSettings.output, invert: e.target.checked } })} />
+      </div>
+      <div className="prop-row">
+        <label title="Stretch the image's 2nd..98th luminance percentiles onto the full range so the glyph ladder gets used decisively (resets exposure, brightness, contrast and gamma)">Tone:</label>
+        <button
+          type="button"
+          className="toolbar-btn"
+          disabled={autoLevelsBusy}
+          onClick={() => void runAutoLevels()}
+        >
+          {autoLevelsBusy ? 'Analyzing…' : 'Auto levels'}
+        </button>
       </div>
 
       <h3>Text Settings</h3>
