@@ -51,6 +51,7 @@ import type { CellEffectEntry } from '../core/fx/pipeline';
 import { appendCellEffect, removeCellEffectAt, moveCellEffect, patchCellEffect, setCellEffectParams } from '../core/fx/entries';
 import { getCellEffect as getRegistryEffect, resolveParams } from '../core/fx';
 import { createTimeline, addTrack, removeTrack, setKeyframe, removeKeyframe } from '../core/timeline/timeline';
+import type { RenderAnalysis } from '../core/analyze';
 
 interface FileHandle {
   name: string;
@@ -119,6 +120,11 @@ export interface AppState {
   gpuPreview: boolean;
   zoomLevel: number;
   statusMessage: string;
+  /**
+   * Latest auto glyph/dither analysis (see `src/core/analyze.ts`), shown as
+   * suggestion chips the user can apply or dismiss. View state only.
+   */
+  renderAnalysis: RenderAnalysis | null;
 
   // Performance
   /**
@@ -245,6 +251,7 @@ export interface AppState {
   disableGpuPreview: (reason: string) => void;
   setZoom: (zoom: number) => void;
   setStatusMessage: (msg: string) => void;
+  setRenderAnalysis: (analysis: RenderAnalysis | null) => void;
   setViewport: (viewport: Partial<ViewportState>) => void;
   setSelection: (selection: Partial<SelectionState>) => void;
   setTool: (tool: Partial<ToolState>) => void;
@@ -343,6 +350,7 @@ export const useStore = create<AppState>()(
       gpuPreview: false,
       zoomLevel: 1,
       statusMessage: 'Ready',
+      renderAnalysis: null,
 
       qualityMode: 'auto',
       debugOverlay: false,
@@ -873,6 +881,7 @@ export const useStore = create<AppState>()(
       },
       setZoom: (zoom) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoom)) }),
       setStatusMessage: (msg) => set({ statusMessage: msg }),
+      setRenderAnalysis: (analysis) => set({ renderAnalysis: analysis }),
 
       setViewport: (viewport) => set((s) => ({ viewport: { ...s.viewport, ...viewport } })),
       setSelection: (selection) => set((s) => ({ selection: { ...s.selection, ...selection } })),

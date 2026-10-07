@@ -5,7 +5,9 @@
  */
 
 import { DEFAULT_IMAGE_RENDER } from '../core/types';
-import type { ImageLayer, ImageSource, Layer } from '../core/types';
+import type { ImageLayer, ImageSource, Layer, Raster } from '../core/types';
+import { lumaPlane } from '../core/image/raster';
+import { analyzeLumaChunked, type RenderAnalysis } from '../core/analyze';
 
 const IMAGE_MIME_OK = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'];
 
@@ -64,4 +66,55 @@ export function isImageFile(file: { type: string; name?: string }): boolean {
 export interface ImportTarget {
   addLayer: (layer: Layer, index?: number) => void;
   setActiveLayer: (id: string) => void;
+}
+
+/**
+ * Downsample an image to an analysis grid and return a Rec.709 luminance
+ * plane (0..1) for {@link analyzeLuma}. Height is scaled for 8x16 cells so
+ * the plane's aspect matches what the renderer would see.
+ */
+export async function sampleImageLuminance(
+  dataUrl: string,
+  columns = 120,
+): Promise<{ luma: Float32Array; width: number; height: number }> {
+  const response = await fetch(dataUrl);
+  const bitmap = await createImageBitmap(await response.blob());
+  try {
+    const w = Math.max(8, Math.min(240, Math.min(columns, bitmap.width)));
+    const h = Math.max(
+      8,
+      Math.min(240, Math.round((w * bitmap.height * 0.5) / bitmap.width)),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('Canvas 2D unavailable for image analysis.');
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const image = ctx.getImageData(0, 0, w, h);
+    const raster: Raster = { width: w, height: h, data: image.data };
+    return { luma: lumaPlane(raster, 'rec709'), width: w, height: h };
+  } finally {
+    bitmap.close();
+  }
+}
+
+/**
+ * Sample an image and run the chunked auto glyph/dither analysis.
+ * Callers decide what to do with the result; throws only on decode failures
+ * (the analysis itself is best-effort and never throws for odd content).
+ */
+export async function runImageAnalysis(
+  dataUrl: string,
+  source: string,
+): Promise<RenderAnalysis> {
+  const { luma, width, height } = await sampleImageLuminance(dataUrl);
+  const result = await analyzeLumaChunked(
+    luma,
+    width,
+    height,
+    {},
+    () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+  );
+  return { ...result, source };
 }

@@ -21,6 +21,7 @@ import {
 import { listCellEffects } from '../core/fx';
 import { THEME_PRESETS } from '../core/theme/theme';
 import { useStore, type LeftPanelId, type RightPanelId } from '../store';
+import { runImageAnalysis } from './imageImport';
 import type { ToolState } from '../core/types';
 
 /** All palette commands, built from the store + the effect/theme registries. */
@@ -140,6 +141,28 @@ export function buildPaletteCommands(): CommandDef[] {
     group: 'Render',
     keywords: ['regenerate ascii image text refresh'],
     run: () => s().triggerRender(),
+  });
+  add({
+    id: 'render.analyze',
+    title: 'Recommend charset & dither (auto analysis)',
+    group: 'Render',
+    keywords: ['auto glyph analyzer suggest best charset dither chips'],
+    run: () => {
+      const state = s();
+      const layer = state.document.layers.find((l) => l.id === state.document.activeLayerId);
+      if (!layer || layer.kind !== 'image' || !layer.source) {
+        state.setStatusMessage('Auto analysis needs an active image layer.');
+        return;
+      }
+      state.setRenderAnalysis(null);
+      state.setStatusMessage('Analyzing image\u2026');
+      void runImageAnalysis(layer.source.dataUrl, layer.name)
+        .then((analysis) => {
+          useStore.getState().setRenderAnalysis(analysis);
+          useStore.getState().setStatusMessage('Auto analysis ready - pick a suggestion.');
+        })
+        .catch(() => useStore.getState().setStatusMessage('Auto analysis failed for this image.'));
+    },
   });
 
   // --- Effects: every registered cell effect -------------------------------

@@ -1,15 +1,18 @@
 import { useRef, useState } from 'react';
 import { useStore } from '../store';
-import { fileToImageSource, createImageLayer, isImageFile } from './imageImport';
+import { fileToImageSource, createImageLayer, isImageFile, runImageAnalysis } from './imageImport';
 
 /**
  * Import images (PNG/JPEG/WebP/BMP) into an image layer, ready for ASCII
  * mapping. Doubles as a drop target so users can drag a picture straight in.
+ * After the last import the auto glyph/dither analyzer runs (chunked, so the
+ * UI stays responsive) and publishes suggestion chips for the user to apply.
  */
 export function useImportImage() {
   const addLayer = useStore((s) => s.addLayer);
   const setActiveLayer = useStore((s) => s.setActiveLayer);
   const fitGridToImage = useStore((s) => s.fitGridToImage);
+  const setRenderAnalysis = useStore((s) => s.setRenderAnalysis);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -23,6 +26,8 @@ export function useImportImage() {
     setError(null);
     setBusy(true);
     try {
+      let lastName = '';
+      let lastDataUrl = '';
       for (const file of images) {
         const source = await fileToImageSource(file);
         const layer = createImageLayer(source);
@@ -31,6 +36,16 @@ export function useImportImage() {
         // Size the grid to the picture so the ASCII covers the same
         // footprint as the source image (8px cells, terminal aspect).
         fitGridToImage(source);
+        lastName = layer.name;
+        lastDataUrl = source.dataUrl;
+      }
+      // Analyze the last import (the active layer). Best-effort: chips are
+      // a convenience, a failed analysis must never fail the import.
+      setRenderAnalysis(null);
+      try {
+        setRenderAnalysis(await runImageAnalysis(lastDataUrl, lastName));
+      } catch {
+        /* keep the import; just skip suggestions */
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed.');

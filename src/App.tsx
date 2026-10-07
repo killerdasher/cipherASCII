@@ -1,5 +1,6 @@
 import CommandPalette from './components/CommandPalette';
 import { DebugOverlay } from './components/DebugOverlay';
+import { RenderSuggestions } from './components/RenderSuggestions';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore, useStoreShallow, selectDocument, selectActiveLayer, selectLayers, selectCanvasSettings, selectIsDirty, selectRenderGeneration, selectPendingRender, selectActivePanel, selectActiveRightPanel, selectShowGrid, selectShowGuides, selectCrtGlow, selectGpuPreview, selectZoomLevel, selectTheme, selectTool } from './store';
@@ -401,6 +402,7 @@ const {
             <SaveProjectModal document={document} isDirty={isDirty} />
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
             <DebugOverlay />
+            <RenderSuggestions />
           </>
         }
       />
