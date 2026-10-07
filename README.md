@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-789%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-820%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -127,13 +127,25 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 - **Character set engine** (`src/utils/characterSets.js`): `generateRange`,
   `ASCII_STANDARD`, `CJK_ULTRA_DENSE` (5,000 glyphs) and a canvas-measured
   `sortCharactersByDensity` for injected text
-- **Canvas drawing tools**: brush, eraser, flood fill, character **and colour**
-  picker, and pan (one undo step per stroke)
+- **Canvas drawing tools**: brush, eraser, flood fill, **text** (type straight
+  onto the canvas with a floating input, Enter places / Esc cancels),
+  character **and colour** picker, and pan (one undo step per stroke)
+- **Launch ratio picker**: the New Project dialog opens at launch with
+  platform preset cards - TikTok/Reels, Instagram portrait & story, web
+  banner 720x300, ad leaderboard 728x90, YouTube thumbnail, X post - each
+  showing its exact snapped cell grid
+- **Auto glyph analyzer**: imports (or `Ctrl+K` "Recommend charset & dither")
+  score every charset x dither pairing against the actual image - perceptual
+  fidelity, banding relief, ladder utilisation - and offer the top picks as
+  one-click suggestion chips
+- **Auto levels**: one click stretches the image's 2nd..98th luminance
+  percentiles onto the full range so the glyph ladder is used decisively
 - **Import auto-size**: a dropped picture sizes the grid to itself (8px cells,
   so `columns = width / 8` and the ASCII covers the same footprint)
 - **Display polish**: **CRT** bloom toggle on the editor canvas (display only),
   plus two ramp sorts - heuristic coverage and canvas measurement
-- **Canvas presets**: TikTok/Reels, square, wide banner and HD artboard sizes
+- **Canvas presets**: TikTok/Reels, Instagram portrait & story, wide banner,
+  web banner, leaderboard, HD, YouTube thumbnail and X post artboard sizes
   that snap to the 8 x 16 cell grid (Settings > Canvas and New Project)
 - **GPU preview**: an optional **PixiJS 8 / WebGL** viewport (toolbar **GPU**)
   with a real CRT shader - barrel curvature, scanlines, glow, vignette -
@@ -331,7 +343,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 789 tests / 39 files, ~8 s
+npm test                          # 820 tests / 43 files, ~11 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
