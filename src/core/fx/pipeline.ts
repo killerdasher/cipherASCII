@@ -56,6 +56,7 @@ export class CellEffectPipeline {
   private rng: Rng;
   private seed: number;
   private salt: number;
+  private paper = 0x0c0c10;
   private maskCache = new Map<string, EffectMask>();
 
   constructor(options: CellPipelineOptions = {}) {
@@ -179,6 +180,11 @@ export class CellEffectPipeline {
     this.salt = seed | 0;
   }
 
+  /** Paper colour handed to every effect through {@link EffectContext.paper}. */
+  setPaper(color: number): void {
+    this.paper = color >>> 0;
+  }
+
   get currentSeed(): number {
     return this.seed;
   }
@@ -223,6 +229,7 @@ export class CellEffectPipeline {
         sourceGlyph: this.sourceGlyph,
         sourceFg: this.sourceFg,
         sourceBg: this.sourceBg,
+        paper: this.paper,
         progress,
         intern: (g) => plane.glyphTable.intern(g),
         resolve: (id) => plane.glyphTable.resolve(id),

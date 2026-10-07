@@ -7,7 +7,7 @@
  */
 
 import { defineEffect, type EffectContext } from '../types';
-import { GLYPH_CIPHER, GLYPH_MIXED, boost, cellSalt, dim, mix, pick, restore, sat } from './helpers';
+import { GLYPH_CIPHER, GLYPH_MIXED, blend, boost, cellSalt, dim, mix, pick, restore, sat } from './helpers';
 
 function scrambleGlyph(ctx: EffectContext, x: number, y: number, salt: number, pool: string): number {
   return ctx.intern(pick(ctx, pool, x, y, salt));
@@ -224,9 +224,15 @@ export const fade = defineEffect<void>({
     const fadeIn = ctx.params.fadeTo > 0.5;
     const t = fadeIn ? 1 - ctx.progress : ctx.progress;
     const opacity = mix(1, floor, t);
-    const alpha = Math.max(1, Math.round(255 * opacity));
+    // AsciiGrid has no alpha channel, so an opacity ramp is implemented as a
+    // colour blend toward what sits behind the cell: its own background when
+    // it has one, otherwise the paper colour of the artboard. That keeps the
+    // fade visible in the editor and identical in every exporter.
     ctx.mask.forEach((_x, _y, index) => {
-      ctx.set(index, ctx.sourceGlyph[index], ctx.sourceFg[index], ctx.sourceBg[index], alpha);
+      const fg = ctx.sourceFg[index];
+      const bg = ctx.sourceBg[index];
+      const base = bg !== -1 ? bg : ctx.paper;
+      ctx.set(index, ctx.sourceGlyph[index], blend(fg, base, 1 - opacity), bg, 255);
     });
   },
 });

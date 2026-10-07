@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useRef, useEffect, useMemo, useState } from 'react';
 import { CELL_SIZE, type AsciiGrid, type Document, type Layer } from '../core/types';
 import { composeDocument } from '../core/layer/compose';
 import { cloneGrid, getCell } from '../core/grid';
@@ -149,7 +149,10 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   const cellEffects = useStore((s) => s.cellEffects);
   const fxSeed = useStore((s) => s.fxSeed);
   // Live cell-effect output. `null` means "paint the plain composed document".
-  const [fxGrid, setFxGrid] = useState<AsciiGrid | null>(null);
+  // A ref (not state): the rAF effect loop mutates this buffer in place and
+  // repaints directly — routing 60 fps frames through React state would both
+  // bail out on identity equality and re-render the component per frame.
+  const fxGridRef = useRef<AsciiGrid | null>(null);
 
   // Adaptive quality: smoothed frame time drives a 0..3 level (only consulted
   // when qualityMode is `auto`). A ref so the paint/effect paths can record
@@ -191,7 +194,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   }, [baseDocument, previewGrid]);
   const composedGrid = useMemo(() => composeDocument(previewDocument), [previewDocument]);
 
-  useEffect(() => {
+  const paint = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -215,7 +218,11 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     const fg = readVar('--fg', '#d4d4d8');
     const border = readVar('--border', '#333333');
 
-    const grid = fxGrid ?? composedGrid;
+    // Effects that fade out blend toward the actual paper colour, so a light
+    // theme fades to light instead of to black.
+    cellFxRuntime.setPaper(Number.parseInt(bg.replace('#', ''), 16) || 0x0c0c10);
+
+    const grid = fxGridRef.current ?? composedGrid;
     const cellW = CELL_W * zoomLevel;
     const cellH = CELL_H * zoomLevel;
     const width = grid.width * cellW;
@@ -248,10 +255,30 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       ctx.stroke();
     }
 
-    // fillStyle is a setter that parses the string; assigning it once per
-    // colour run instead of once per cell is the difference between a paint
-    // and a paint that stutters on dense grids.
+    // Paint is what the exporters see: backgrounds first, then glyphs. The
+    // PNG/HTML/ANSI exporters fill a cell's bg before its glyph — the editor
+    // used to skip it, which hid every bg-writing effect from the preview.
+    // Runs are collapsed into one fillRect per colour span, like the glyph
+    // pass collapses its fillStyle changes.
     const paintGrid = (target: AsciiGrid): void => {
+      if (target.bg) {
+        for (let y = 0; y < target.height; y++) {
+          const rowBase = y * target.width;
+          let x = 0;
+          while (x < target.width) {
+            const colour = target.bg[rowBase + x];
+            if (colour < 0) {
+              x++;
+              continue;
+            }
+            let run = x + 1;
+            while (run < target.width && target.bg[rowBase + run] === colour) run++;
+            ctx.fillStyle = `#${colour.toString(16).padStart(6, '0')}`;
+            ctx.fillRect(x * cellW, y * cellH, (run - x) * cellW, cellH);
+            x = run;
+          }
+        }
+      }
       let fill = '';
       for (let y = 0; y < target.height; y++) {
         for (let x = 0; x < target.width; x++) {
@@ -309,17 +336,35 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     // Paint is the dominant per-frame cost, so it is what the adaptive
     // controller listens to (the effect loop reports its own cost too).
     adaptiveRef.current = observeFrame(adaptiveRef.current, performance.now() - paintStart, budget.targetMs);
-  }, [composedGrid, fxGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview, qualityMode]);
+  }, [composedGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview, qualityMode]);
 
-  // Cell-effect playback: advance the runtime at frame rate and repaint only
-  // while it can still change pixels. The loop stops itself once every
-  // one-shot has settled, so an idle editor costs zero frames.
+  // React-driven paints: document edits, zoom, theme switches, tool changes.
+  // The effect loop below calls `paint` directly, because pushing 60 fps
+  // frames through state would bail out on buffer identity and never repaint.
   useEffect(() => {
+    paint();
+  }, [paint]);
+
+  // Cell-effect playback: advance the runtime at frame rate and repaint
+  // straight from the frame callback. The runtime runs in *loop* mode, so a
+  // one-shot effect replays instead of settling and vanishing — the artist
+  // keeps seeing it until they remove it. The loop still stops itself the
+  // moment the stack is empty, so an idle editor costs zero frames.
+  useEffect(() => {
+    cellFxRuntime.setLoop(true);
     cellFxRuntime.sync(cellEffects, fxSeed);
     if (cellEffects.length === 0) {
-      setFxGrid(null);
+      fxGridRef.current = null;
+      paint();
       return;
     }
+    // Prime synchronously: the paint effect for this same commit may already
+    // have run with a stale (or empty) fx buffer, and a document change means
+    // the runtime's source snapshot must be recaptured before anything shows.
+    const prime = cellFxRuntime.frame(composedGrid, 1);
+    if (prime) fxGridRef.current = prime;
+    paint();
+
     let raf = 0;
     let alive = true;
     let last = performance.now();
@@ -340,10 +385,8 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
         accumulated = 0;
         const next = cellFxRuntime.frame(composedGrid, advance);
         if (next) {
-          setFxGrid(next);
-        } else if (!cellFxRuntime.needsFrames) {
-          setFxGrid(null);
-          return;
+          fxGridRef.current = next;
+          paint();
         }
       }
       adaptiveRef.current = observeFrame(adaptiveRef.current, performance.now() - frameStart, budget.targetMs);
@@ -354,7 +397,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       alive = false;
       cancelAnimationFrame(raf);
     };
-  }, [cellEffects, fxSeed, composedGrid, qualityMode]);
+  }, [cellEffects, fxSeed, composedGrid, qualityMode, paint]);
 
   // Debug overlay: publish a snapshot at ~2 Hz (never per animation frame) so
   // watching the numbers costs nothing while they are hidden.

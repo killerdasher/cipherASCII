@@ -68,6 +68,14 @@ export interface EffectContext {
   readonly sourceFg: Int32Array;
   /** Background colour snapshot of the source grid (`-1` = none). */
   readonly sourceBg: Int32Array;
+  /**
+   * Paper colour behind the grid (`0xRRGGBB`).
+   *
+   * The editor passes the active theme's artboard colour so effects that
+   * "fade out" blend toward what is actually behind the cells instead of a
+   * hard-coded black that would be wrong on light themes.
+   */
+  readonly paper: number;
   /** Per-cell progress of the owning effect, 0..1. */
   readonly progress: number;
   /** Resolve a glyph string through the plane's shared table. */

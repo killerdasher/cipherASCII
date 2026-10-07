@@ -144,3 +144,43 @@ describe('CellFxRuntime', () => {
     expect(rt.needsFrames).toBe(false);
   });
 });
+
+describe('CellFxRuntime loop mode (editor preview)', () => {
+  it('replays a one-shot instead of settling and going null', () => {
+    const rt = new CellFxRuntime();
+    rt.setLoop(true);
+    const grid = makeGrid(20, 10);
+    rt.sync([{ effect: 'decrypt' }], 7);
+    // decrypt.duration is 1400 ms; 400 frames x 16 ms is nearly a full
+    // second past its end, where the non-looping runtime returns null.
+    let out: AsciiGrid | null = null;
+    for (let i = 0; i < 400; i++) out = rt.frame(grid, 16);
+    expect(out).not.toBeNull();
+    expect(rt.needsFrames).toBe(true);
+    expect(rt.frame(grid, 16)).not.toBeNull();
+  });
+
+  it('stays null with no entries even in loop mode', () => {
+    const rt = new CellFxRuntime();
+    rt.setLoop(true);
+    rt.sync([], 7);
+    expect(rt.frame(makeGrid(), 16)).toBeNull();
+    expect(rt.needsFrames).toBe(false);
+  });
+
+  it('fades toward the paper colour supplied by the host', () => {
+    const rt = new CellFxRuntime();
+    rt.setPaper(0x102030);
+    const grid = makeGrid(8, 4);
+    rt.sync([{ effect: 'fade' }], 7);
+    let last: AsciiGrid | null = null;
+    for (let i = 0; i < 200; i++) {
+      const frame = rt.frame(grid, 16);
+      if (frame) last = frame;
+    }
+    // fade.duration is 800 ms: by frame ~50 the ramp finishes and every
+    // masked foreground has blended all the way into the paper.
+    expect(last).not.toBeNull();
+    expect(last!.fg![1]).toBe(0x102030);
+  });
+});

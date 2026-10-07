@@ -26,6 +26,23 @@ export class CellFxRuntime {
   private sourceGrid: AsciiGrid | null = null;
   private out: AsciiGrid | null = null;
   private pending = true;
+  private loop = false;
+
+  /**
+   * Replay finished one-shots instead of going idle (editor preview mode).
+   *
+   * Off by default so callers that want a *baked* end state — the demo, the
+   * goldens, an exporter — keep the settle-once semantics. The editor turns it
+   * on so an effect stays on screen instead of flashing once and vanishing.
+   */
+  setLoop(loop: boolean): void {
+    this.loop = loop;
+  }
+
+  /** Paper colour behind the grid; forwarded to every effect's context. */
+  setPaper(color: number): void {
+    this.pipeline.setPaper(color);
+  }
 
   /**
    * Adopt the store's current entry list and seed.
@@ -50,8 +67,8 @@ export class CellFxRuntime {
    * Advance the effects by `dt` milliseconds and return the grid to paint.
    *
    * Returns `null` when there is nothing to draw (no entries, or every
-   * one-shot has settled) — callers use that to skip the repaint and to stop
-   * their animation loop.
+   * one-shot has settled while looping is off) — callers use that to skip the
+   * repaint and to stop their animation loop.
    */
   frame(grid: AsciiGrid, dt: number): AsciiGrid | null {
     if (this.plane.width !== grid.width || this.plane.height !== grid.height) {
@@ -70,15 +87,20 @@ export class CellFxRuntime {
       this.pending = false;
     }
     if (this.entries.length === 0) return null;
-    if (!this.pipeline.needsFrames) return null;
+    if (!this.pipeline.needsFrames) {
+      if (!this.loop) return null;
+      // Everything settled: replay the stack from t=0 so the effect keeps
+      // playing (deterministic — resetClocks also rewinds the RNG).
+      this.pipeline.resetClocks();
+    }
     this.pipeline.apply(this.plane, dt);
     this.out = planeToGrid(this.plane, this.out);
     return this.out;
   }
 
-  /** True while at least one bound entry can still change the plane. */
+  /** True while the runtime can still change pixels on the next frame. */
   get needsFrames(): boolean {
-    return this.entries.length > 0 && this.pipeline.needsFrames;
+    return this.entries.length > 0 && (this.pipeline.needsFrames || this.loop);
   }
 
   /** Drop all entries and forget the source; used when a document closes. */

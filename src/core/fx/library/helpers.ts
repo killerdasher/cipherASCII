@@ -82,6 +82,22 @@ export function mix(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/**
+ * Blend one colour toward another (`t = 0` keeps `from`, `t = 1` is `to`).
+ *
+ * `NO_COLOR` on either side passes through untouched — a cell with no colour
+ * must not be given one by an interpolation.
+ */
+export function blend(from: number, to: number, t: number): number {
+  if (from === NO_COLOR || to === NO_COLOR || t <= 0) return from;
+  if (t >= 1) return to;
+  const k = Math.max(0, Math.min(1, t));
+  const r = Math.round(((from >> 16) & 0xff) + (((to >> 16) & 0xff) - ((from >> 16) & 0xff)) * k);
+  const g = Math.round(((from >> 8) & 0xff) + (((to >> 8) & 0xff) - ((from >> 8) & 0xff)) * k);
+  const b = Math.round((from & 0xff) + ((to & 0xff) - (from & 0xff)) * k);
+  return (r << 16) | (g << 8) | b;
+}
+
 /** Clamp to [0,1]. */
 export function sat(t: number): number {
   return t < 0 ? 0 : t > 1 ? 1 : t;
