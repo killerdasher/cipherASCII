@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { gridToLines } from '../../src/core/grid';
+import { gridToLines, gridToString, linesToGrid, overlayGrid } from '../../src/core/grid';
 import { BUILTIN_FONTS } from '../../src/core/text/bitmapFonts';
 import { figletToBitmapFont, parseFiglet, type FigletFont } from '../../src/core/text/figlet';
 import { renderTextToGrid } from '../../src/core/text/render';
@@ -282,5 +282,63 @@ describe('figletToBitmapFont', () => {
       expect(width).toBeGreaterThan(0);
       for (const row of rows) expect(row).toHaveLength(width);
     }
+  });
+});
+
+describe('text tool stamp composition', () => {
+  // The editor text tool renders a stamp with renderTextToGrid and composes
+  // it over the active layer with overlayGrid(..., spaceIsTransparent) — the
+  // same call the live preview and the committed grid/paint both go through.
+  const stamp = (text: string, opts: { fg?: number; inkChar?: string } = {}) =>
+    renderTextToGrid(text, DEFAULT_TEXT_RENDER, opts);
+
+  it('keeps the artwork showing through the stamp spaces', () => {
+    const base = linesToGrid(['........', '........', '........']);
+    const out = overlayGrid(base, stamp('A', { fg: 0xff0000 }), 2, 0, {
+      spaceIsTransparent: true,
+    });
+    const lines = gridToLines(out);
+    // The margin column is untouched; the glyph interior and its surrounding
+    // spaces keep the base character wherever the stamp did not write ink.
+    expect(lines.every((row) => row.startsWith('.'))).toBe(true);
+    expect(lines.flat().some((row) => row.includes('#'))).toBe(true);
+    expect(lines.flat().some((row) => row.includes('.'))).toBe(true);
+  });
+
+  it('applies the foreground to ink only, leaving base cells colourless', () => {
+    const base = linesToGrid(['....', '....', '....']);
+    const out = overlayGrid(base, stamp('A', { fg: 0xff0000 }), 0, 0, {
+      spaceIsTransparent: true,
+    });
+    expect(out.fg).toBeTruthy();
+    let ink = 0;
+    for (let i = 0; i < out.chars.length; i++) {
+      if (out.chars[i] === '#') {
+        expect(out.fg![i]).toBe(0xff0000);
+        ink++;
+      } else {
+        expect(out.fg![i]).toBe(-1);
+      }
+    }
+    expect(ink).toBeGreaterThan(0);
+  });
+
+  it('honours the brush character as ink', () => {
+    const grid = stamp('A', { inkChar: '@' });
+    expect(gridToString(grid)).toContain('@');
+    expect(gridToString(grid)).not.toContain('#');
+  });
+
+  it('clips stamps that hang off the canvas without throwing', () => {
+    const base = linesToGrid(['....', '....']);
+    expect(() =>
+      overlayGrid(base, stamp('HELLO WORLD'), -3, -2, { spaceIsTransparent: true }),
+    ).not.toThrow();
+    expect(() =>
+      overlayGrid(base, stamp('HELLO WORLD'), 60, 40, { spaceIsTransparent: true }),
+    ).not.toThrow();
+    // Far outside the canvas: nothing changes.
+    const out = overlayGrid(base, stamp('HI'), 60, 40, { spaceIsTransparent: true });
+    expect(gridToLines(out)).toEqual(gridToLines(base));
   });
 });

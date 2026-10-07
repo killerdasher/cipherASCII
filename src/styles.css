@@ -300,6 +300,69 @@ html, body, #root {
   cursor: grabbing;
 }
 
+.tool-text .editor-canvas {
+  cursor: text;
+}
+
+/* Text tool: floating input anchored on the clicked cell, plus explicit
+   Place/Cancel buttons so the commit path never depends on blur timing. */
+.text-tool-overlay {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.text-tool-overlay textarea {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.4;
+  min-width: 280px;
+  padding: 6px 8px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.text-tool-overlay textarea:focus {
+  outline: 1px solid var(--accent);
+}
+
+.text-tool-overlay textarea::placeholder {
+  color: var(--fg-muted);
+  opacity: 0.8;
+}
+
+.text-tool-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.text-tool-actions button {
+  font-size: 12px;
+  padding: 3px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.text-tool-actions button.primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .layer-panel {
   display: flex;
   flex-direction: column;

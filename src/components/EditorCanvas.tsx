@@ -1,11 +1,12 @@
 import { Suspense, lazy, useCallback, useRef, useEffect, useMemo, useState } from 'react';
 import { CELL_SIZE, type AsciiGrid, type Document, type Layer } from '../core/types';
 import { composeDocument } from '../core/layer/compose';
-import { cloneGrid, getCell } from '../core/grid';
+import { cloneGrid, getCell, overlayGrid } from '../core/grid';
+import { renderTextToGrid } from '../core/text';
 import { applySubtexture, shouldApplySubtexture } from '../core/subtexture';
 import { applyTimelineToDocument, getOnionSkinFrames } from '../core/timeline/timeline';
 import { timelineHasAnimation } from '../core/timeline/playback';
-import { useStore } from '../store';
+import { useStore, selectTextSettings } from '../store';
 import { cellFxRuntime } from '../core/fx';
 import { resolveBudget } from '../core/perf/quality';
 import { adaptiveFps, createAdaptive, observeFrame } from '../core/perf/adaptive';
@@ -141,6 +142,14 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   const lastCellRef = useRef<{ x: number; y: number } | null>(null);
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [previewGrid, setPreviewGrid] = useState<AsciiGrid | null>(null);
+  // Text tool: anchor cell + raw input. The rendered stamp flows through the
+  // same previewGrid the brush uses, so the canvas shows the real thing while
+  // typing and the commit is one ordinary undoable grid/paint command.
+  const [textAnchor, setTextAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [textValue, setTextValue] = useState('');
+  const textSettings = useStore(selectTextSettings);
+  const brushChar = useStore((s) => s.tool.brushChar);
+  const foregroundColor = useStore((s) => s.tool.foregroundColor);
   const themeId = useStore((s) => s.theme.id);
   const crtGlow = useStore((s) => s.crtGlow);
   const gpuPreview = useStore((s) => s.gpuPreview);
@@ -193,6 +202,57 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     };
   }, [baseDocument, previewGrid]);
   const composedGrid = useMemo(() => composeDocument(previewDocument), [previewDocument]);
+
+  // --- Text tool ------------------------------------------------------------
+  // Commit/cancel close the overlay and flush the stamped preview as one
+  // undoable command, mirroring how a brush stroke commits on pointer-up.
+  const commitText = (): void => {
+    const grid = previewGridRef.current;
+    const layerId = activeLayer?.id;
+    previewGridRef.current = null;
+    setPreviewGrid(null);
+    setTextAnchor(null);
+    setTextValue('');
+    if (!grid || !layerId) return;
+    const store = useStore.getState();
+    store.applyCommand({ type: 'grid/paint', layerId, grid });
+    store.setStatusMessage('Text placed (Ctrl+Z to undo)');
+  };
+
+  const cancelText = (): void => {
+    previewGridRef.current = null;
+    setPreviewGrid(null);
+    setTextAnchor(null);
+    setTextValue('');
+  };
+
+  // Live stamp: render the typed text into a clone of the active layer on
+  // every keystroke / colour / font change, so the canvas shows exactly what
+  // will be committed. Spaces in the stamp stay transparent - text composes
+  // over the artwork instead of wiping a rectangle of it.
+  useEffect(() => {
+    if (!textAnchor || !activeLayer?.grid) return;
+    if (textValue.length === 0) {
+      if (previewGridRef.current) {
+        previewGridRef.current = null;
+        setPreviewGrid(null);
+      }
+      return;
+    }
+    const state = useStore.getState();
+    const ink = state.tool.brushChar.trim() ? state.tool.brushChar : '#';
+    const stamp = renderTextToGrid(textValue, textSettings, { fg: foregroundColor, inkChar: ink });
+    const next = overlayGrid(activeLayer.grid, stamp, textAnchor.x, textAnchor.y, {
+      spaceIsTransparent: true,
+    });
+    previewGridRef.current = next;
+    setPreviewGrid(next);
+  }, [textAnchor, textValue, textSettings, activeLayer, foregroundColor, brushChar]);
+
+  // Switching away from the text tool abandons an unplaced box.
+  useEffect(() => {
+    if (textAnchor && tool.activeTool !== 'text') cancelText();
+  }, [tool.activeTool]);
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
@@ -476,6 +536,15 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     const cell = cellAt(e);
     capture(e);
 
+    if (activeTool === 'text') {
+      // Place whatever is typed at the old anchor first, then open a fresh
+      // box at the clicked cell (the same "click away to commit" Canva has).
+      commitText();
+      setTextAnchor(cell);
+      setTextValue('');
+      return;
+    }
+
     if (activeTool === 'eyedropper') {
       const ch = getCell(base, cell.x, cell.y);
       const inBounds = cell.x >= 0 && cell.y >= 0 && cell.x < base.width && cell.y < base.height;
@@ -578,6 +647,38 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
               onFallback={(reason) => useStore.getState().disableGpuPreview(reason)}
             />
           </Suspense>
+        )}
+        {textAnchor && (
+          <div
+            className="text-tool-overlay"
+            style={{ left: textAnchor.x * CELL_W * zoomLevel, top: textAnchor.y * CELL_H * zoomLevel }}
+          >
+            <textarea
+              autoFocus
+              value={textValue}
+              rows={2}
+              spellCheck={false}
+              placeholder="Type… Enter places · Esc cancels · Shift+Enter new line"
+              onChange={(e) => setTextValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  commitText();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelText();
+                }
+              }}
+            />
+            <div className="text-tool-actions">
+              <button type="button" className="primary" onMouseDown={(e) => e.preventDefault()} onClick={commitText}>
+                Place
+              </button>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={cancelText}>
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

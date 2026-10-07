@@ -275,6 +275,7 @@ const {
           b: 'brush',
           e: 'eraser',
           f: 'fill',
+          t: 'text',
           i: 'eyedropper',
           h: 'pan',
         };

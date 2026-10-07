@@ -119,6 +119,7 @@ export function buildPaletteCommands(): CommandDef[] {
     ['brush', 'Brush', 'b draw paint'],
     ['eraser', 'Eraser', 'e clear'],
     ['fill', 'Flood fill', 'f bucket'],
+    ['text', 'Text', 't type write letter caption headline'],
     ['eyedropper', 'Eyedropper', 'i pick colour color'],
     ['pan', 'Pan', 'h move scroll'],
   ];

@@ -28,6 +28,17 @@ const TOOLS = [
     icon: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />,
   },
   {
+    id: 'text',
+    label: 'Text (T)',
+    icon: (
+      <>
+        <path d="M4 7V4h16v3" />
+        <path d="M9 20h6" />
+        <path d="M12 4v16" />
+      </>
+    ),
+  },
+  {
     id: 'eyedropper',
     label: 'Pick character (I)',
     icon: (
