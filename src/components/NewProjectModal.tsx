@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createDocument } from '../core/project/schema';
 import { CELL_SIZE, DEFAULT_SUBTEXTURE, DEFAULT_IMAGE_RENDER } from '../core/types';
 import {
@@ -12,8 +12,13 @@ interface NewProjectModalProps {
   onCreate: (overrides?: Partial<any>) => void;
 }
 
+/** "TikTok / Reels - 1080 x 1920" -> "TikTok / Reels" */
+const presetTitle = (label: string): string => label.split(' - ')[0];
+
 export function NewProjectModal({ onCreate }: NewProjectModalProps) {
-  const [open, setOpen] = useState(false);
+  // Open at launch: the first thing you do is choose the artboard ratio,
+  // Canva-style. The toolbar "New Project" button reopens the same picker.
+  const [open, setOpen] = useState(true);
   const [name, setName] = useState('Untitled');
   const [width, setWidth] = useState(80);
   const [height, setHeight] = useState(24);
@@ -26,6 +31,8 @@ export function NewProjectModal({ onCreate }: NewProjectModalProps) {
       const cells = canvasPresetToCells(preset);
       setWidth(cells.columns);
       setHeight(cells.rows);
+      // Suggest a document name from the ratio while the name is untouched.
+      if (name.trim() === '' || name === 'Untitled') setName(presetTitle(preset.label));
     }
   };
 
@@ -38,6 +45,15 @@ export function NewProjectModal({ onCreate }: NewProjectModalProps) {
     setHeight(value);
     setPresetId(matchCanvasPreset(width, value));
   };
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   const handleCreate = () => {
     const doc = createDocument({
@@ -54,33 +70,49 @@ export function NewProjectModal({ onCreate }: NewProjectModalProps) {
       <button className="modal-trigger" onClick={() => setOpen(true)}>New Project</button>
       {open && (
         <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal project-modal" onClick={(e) => e.stopPropagation()}>
             <h2>New Project</h2>
-            <div className="prop-row">
-              <label>Name:</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} />
+            <p className="modal-sub">Start from a platform ratio, or enter your own size.</p>
+            <div className="preset-grid" role="radiogroup" aria-label="Canvas presets">
+              {CANVAS_PRESETS.filter((p) => p.id !== 'custom').map((p) => {
+                const cells = canvasPresetToCells(p);
+                const [title, dims] = p.label.split(' - ');
+                const selected = presetId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    className={selected ? 'preset-card selected' : 'preset-card'}
+                    onClick={() => applyPreset(p.id)}
+                  >
+                    <span
+                      className="preset-swatch"
+                      style={{ aspectRatio: `${p.width} / ${p.height}` }}
+                      aria-hidden="true"
+                    />
+                    <span className="preset-title">{title}</span>
+                    <span className="preset-dims">
+                      {dims} · {cells.columns}×{cells.rows} cells
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-            <div className="prop-row">
-              <label>Preset:</label>
-              <select
-                value={presetId}
-                onChange={(e) => applyPreset(e.target.value as CanvasPresetId)}
-                title="Platform size; snaps to the 8 x 16 cell grid"
-              >
-                {CANVAS_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="prop-row">
-              <label>Width:</label>
-              <input type="number" value={width} min="1" max="500" onChange={(e) => setManualWidth(Number(e.target.value))} />
-            </div>
-            <div className="prop-row">
-              <label>Height:</label>
-              <input type="number" value={height} min="1" max="500" onChange={(e) => setManualHeight(Number(e.target.value))} />
+            <div className="preset-custom-row">
+              <div className="prop-row">
+                <label>Name:</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="prop-row">
+                <label>Width:</label>
+                <input type="number" value={width} min="1" max="500" onChange={(e) => setManualWidth(Number(e.target.value))} />
+              </div>
+              <div className="prop-row">
+                <label>Height:</label>
+                <input type="number" value={height} min="1" max="500" onChange={(e) => setManualHeight(Number(e.target.value))} />
+              </div>
             </div>
             <div className="prop-row">
               <label>

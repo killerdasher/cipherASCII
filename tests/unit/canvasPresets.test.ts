@@ -81,3 +81,25 @@ describe('applyCanvasPreset (store)', () => {
     expect(useStore.getState().isDirty).toBe(false);
   });
 });
+
+describe('launch-picker ratios', () => {
+  it('snaps the banner, leaderboard and social targets to cells', () => {
+    expect(canvasPresetToCells({ width: 720, height: 300 })).toEqual({ columns: 90, rows: 19 });
+    expect(canvasPresetToCells({ width: 728, height: 90 })).toEqual({ columns: 91, rows: 6 });
+    expect(canvasPresetToCells({ width: 1080, height: 1350 })).toEqual({ columns: 135, rows: 84 });
+    expect(canvasPresetToCells({ width: 1280, height: 720 })).toEqual({ columns: 160, rows: 45 });
+    expect(canvasPresetToCells({ width: 1600, height: 900 })).toEqual({ columns: 200, rows: 56 });
+  });
+
+  it('matches the new presets by their snapped cell size', () => {
+    expect(matchCanvasPreset(90, 19)).toBe('banner');
+    expect(matchCanvasPreset(91, 6)).toBe('leaderboard');
+    expect(matchCanvasPreset(135, 84)).toBe('portrait');
+    expect(matchCanvasPreset(160, 45)).toBe('youtube');
+    expect(matchCanvasPreset(200, 56)).toBe('xpost');
+  });
+
+  it('keeps the vertical-video cells resolving to the first listing (tiktok)', () => {
+    expect(matchCanvasPreset(135, 120)).toBe('tiktok');
+  });
+});
