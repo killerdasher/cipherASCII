@@ -32,7 +32,7 @@ import type {
   Theme,
   EffectId,
 } from '../core/types';
-import { ASPECT_PRESETS } from '../core/types';
+import { ASPECT_PRESETS, DEFAULT_FX_SEED } from '../core/types';
 import { columnsForImageWidth } from '../core/renderImage';
 import { createDocument } from '../core/project/schema';
 import { applyCommand, type Command } from '../core/history/commands';
@@ -329,7 +329,7 @@ export const useStore = create<AppState>()(
 
       effectsPipeline: defaultEffectsPipeline,
       cellEffects: [],
-      fxSeed: 0x5eed,
+      fxSeed: initialDocument.fxSeed,
       timeline: defaultTimeline,
       timelines: [defaultTimeline],
       activeTimelineId: defaultTimeline.id,
@@ -382,6 +382,7 @@ export const useStore = create<AppState>()(
           fileHandle: null,
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
+          fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
         });
         get().triggerRender();
       },
@@ -395,6 +396,7 @@ export const useStore = create<AppState>()(
           // A loaded project carries its own effects stack.
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
+          fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
         });
         get().triggerRender();
       },
@@ -421,6 +423,7 @@ export const useStore = create<AppState>()(
             isDirty: true,
             effectsPipeline: prev.effectsPipeline ?? createEffectsPipeline(),
             cellEffects: prev.cellEffects ?? [],
+            fxSeed: prev.fxSeed ?? DEFAULT_FX_SEED,
           });
           // Only re-render when the undo restored render-affecting settings;
           // re-rendering a paint undo would regenerate the layer and wipe it.
@@ -437,6 +440,7 @@ export const useStore = create<AppState>()(
             isDirty: true,
             effectsPipeline: next.effectsPipeline ?? createEffectsPipeline(),
             cellEffects: next.cellEffects ?? [],
+            fxSeed: next.fxSeed ?? DEFAULT_FX_SEED,
           });
           if (renderSettingsChanged(document, next)) get().triggerRender();
         }
@@ -687,7 +691,8 @@ export const useStore = create<AppState>()(
 
       setFxSeed: (seed) => {
         const doc = get().document;
-        set({ fxSeed: seed | 0, document: { ...doc }, isDirty: true });
+        const next = seed | 0;
+        set({ fxSeed: next, document: { ...doc, fxSeed: next }, isDirty: true });
       },
 
       // Timeline

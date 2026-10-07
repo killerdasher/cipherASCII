@@ -1,4 +1,5 @@
 import type { CellEffectEntry } from './fx/pipeline';
+import type { GeneratorGraph } from './generators/graph';
 
 /**
  * Core data contracts for ASCII Art Studio.
@@ -366,7 +367,51 @@ export interface TextLayer extends LayerBase {
   cacheKey: string;
 }
 
-export type Layer = AsciiLayer | ImageLayer | TextLayer;
+// ---------------------------------------------------------------------------
+// Creative (generative) layer
+// ---------------------------------------------------------------------------
+
+/**
+ * How a generative field is turned back into glyphs.
+ *
+ * Reuses the exact settings objects the image pipeline already consumes:
+ * `mapping` feeds `runMapping`, `output` feeds `inkToIndex`, `dither` feeds
+ * `applyDither` - so a creative layer renders through the same code path as
+ * an imported photo instead of a parallel one.
+ */
+export interface CreativeRenderSettings {
+  mapping: MappingSettings;
+  output: MappingOutputSettings;
+  dither: DitherId;
+}
+
+export const DEFAULT_CREATIVE_RENDER: CreativeRenderSettings = {
+  mapping: { strategy: 'luminance', radius: 3, threshold: 0.5, strength: 1, curve: [] },
+  output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false },
+  dither: 'none',
+};
+
+/**
+ * A layer painted by a {@link GeneratorGraph} rather than by an image or text.
+ *
+ * Non-destructive by construction: the graph and its settings live in the
+ * document, `grid` is only a derived cache invalidated by
+ * `creativeCacheKey`, and Phase 6 fills it by evaluating `graphId` at canvas
+ * resolution.
+ */
+export interface CreativeLayer extends LayerBase {
+  kind: 'creative';
+  /** Id of the generator graph in {@link Document.generators}. */
+  graphId: string;
+  /** Field -> glyph mapping controls. */
+  render: CreativeRenderSettings;
+  /** Derived cache; `null` until the generative pipeline has run. */
+  grid: AsciiGrid | null;
+  /** Invalidation key for `grid` (see `creativeCacheKey`). */
+  cacheKey: string;
+}
+
+export type Layer = AsciiLayer | ImageLayer | TextLayer | CreativeLayer;
 
 export interface Guide {
   axis: 'h' | 'v';
@@ -537,9 +582,16 @@ export interface Document {
   renderPresets: RenderPreset[];
   /** Active theme ID. */
   themeId: string;
+  /** Procedural generator graphs; creative layers reference these by id. */
+  generators: GeneratorGraph[];
+  /** Seed for procedural generators and cell-effect RNG. */
+  fxSeed: number;
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+/** Seed used when a document predates {@link Document.fxSeed}. */
+export const DEFAULT_FX_SEED = 0x5eed;
+
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Results / errors

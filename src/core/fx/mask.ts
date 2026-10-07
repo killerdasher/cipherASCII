@@ -20,7 +20,23 @@ export type MaskKind =
   | 'foreground'
   | 'background';
 
+/** Every valid {@link MaskKind}, in declaration order. */
+export const MASK_KINDS: readonly MaskKind[] = [
+  'all',
+  'rect',
+  'rows',
+  'columns',
+  'checker',
+  'band',
+  'glyphClass',
+  'foreground',
+  'background',
+];
+
 export type GlyphClass = 'space' | 'nonspace' | 'punctuation' | 'digit' | 'letter';
+
+/** Every valid {@link GlyphClass}, for validation and UI palettes. */
+export const GLYPH_CLASSES: readonly GlyphClass[] = ['space', 'nonspace', 'punctuation', 'digit', 'letter'];
 
 export interface MaskSpec {
   kind: MaskKind;

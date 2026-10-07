@@ -5,8 +5,10 @@ import {
   detectFormat,
   serializeProject,
 } from '../../src/core/project/serialize';
+import { MASK_KINDS, type MaskSpec } from '../../src/core/fx/mask';
 import {
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_FX_SEED,
   type AsciiLayer,
   type Document,
   type Result,
@@ -248,6 +250,110 @@ describe('serializeProject / deserializeProject', () => {
       showLineNumbers: false,
     });
     expect(migrated.guides).toEqual([]);
+  });
+});
+
+describe('schema version 3', () => {
+  it('bumps CURRENT_SCHEMA_VERSION to 3', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(3);
+  });
+
+  it('round-trips generators and fxSeed', () => {
+    const original: Document = {
+      ...sampleDocument(),
+      fxSeed: 0xc0ffee,
+      generators: [
+        {
+          id: 'graph-1',
+          name: 'Noise',
+          seed: 11,
+          nodes: [{ id: 'n', kind: 'valueNoise', params: { scale: 8, octaves: 2 }, x: 12, y: 40 }],
+          edges: [],
+          output: 'n',
+        },
+      ],
+    };
+    const restored = value(deserializeProject(serializeProject(original)));
+    expect(restored.generators).toEqual(original.generators);
+    expect(restored.fxSeed).toBe(0xc0ffee);
+  });
+
+  it('adds generators and the default seed to documents written before version 3', () => {
+    const legacy: Record<string, unknown> = { ...createDocument(), schemaVersion: 2 };
+    delete legacy.generators;
+    delete legacy.fxSeed;
+    const migrated = value(deserializeProject(JSON.stringify(legacy)));
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.generators).toEqual([]);
+    expect(migrated.fxSeed).toBe(DEFAULT_FX_SEED);
+  });
+
+  it('repairs unusable seeds and drops irreparable generator graphs', () => {
+    const base = createDocument();
+    const raw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+    raw.fxSeed = 'chaos';
+    raw.generators = [
+      { id: 'good', name: '', seed: 2, nodes: [{ id: 'n', kind: 'constant', params: {} }], edges: [], output: 'n' },
+      { id: 'bad', nodes: 'nope' },
+      'not-an-object',
+    ];
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.fxSeed).toBe(DEFAULT_FX_SEED);
+    expect(restored.generators.map((g) => g.id)).toEqual(['good']);
+
+    raw.fxSeed = 42.9;
+    expect(value(deserializeProject(JSON.stringify(raw))).fxSeed).toBe(42);
+  });
+
+  it('keeps unknown generator node kinds so newer projects still load', () => {
+    const base = createDocument();
+    const raw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+    raw.generators = [
+      {
+        id: 'future',
+        name: '',
+        seed: 0,
+        nodes: [{ id: 'n', kind: 'neural-hologram', params: { intensity: 0.5 } }],
+        edges: [],
+        output: 'n',
+      },
+    ];
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.generators[0].nodes[0].kind).toBe('neural-hologram');
+  });
+});
+
+describe('cell-effect mask persistence', () => {
+  const MASK_SAMPLES: MaskSpec[] = [
+    { kind: 'all' },
+    { kind: 'rect', x: 1, y: 2, w: 3, h: 4 },
+    { kind: 'rows', rowStart: 1, rowEnd: 3 },
+    { kind: 'columns', colStart: 0, colEnd: 5 },
+    { kind: 'checker', cell: 3 },
+    { kind: 'band', thickness: 2, origin: 'bottom' },
+    { kind: 'glyphClass', glyphClass: 'digit' },
+    { kind: 'foreground', hasForeground: true },
+    { kind: 'background', hasBackground: false },
+  ];
+
+  it('persists every registered mask kind with its own fields', () => {
+    expect(MASK_SAMPLES.map((m) => m.kind).sort()).toEqual([...MASK_KINDS].sort());
+    expect(MASK_KINDS).toHaveLength(9);
+
+    const original: Document = {
+      ...sampleDocument(),
+      cellEffects: MASK_SAMPLES.map((mask) => ({ effect: 'rain', mask })),
+    };
+    const restored = value(deserializeProject(serializeProject(original)));
+    expect(restored.cellEffects.map((e) => e.mask)).toEqual(original.cellEffects.map((e) => e.mask));
+  });
+
+  it('drops an unknown glyph class but keeps the mask kind', () => {
+    const base = createDocument();
+    const raw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+    raw.cellEffects = [{ effect: 'rain', mask: { kind: 'glyphClass', glyphClass: 'emoji' } }];
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.cellEffects[0].mask).toEqual({ kind: 'glyphClass' });
   });
 });
 

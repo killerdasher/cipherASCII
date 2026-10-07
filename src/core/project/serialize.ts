@@ -6,8 +6,11 @@
  */
 
 import type { CellEffectEntry } from '../fx/pipeline';
+import { GLYPH_CLASSES, MASK_KINDS, type GlyphClass } from '../fx/mask';
+import { canonicalGeneratorGraph, type GeneratorGraph } from '../generators/graph';
 import {
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_FX_SEED,
   DEFAULT_SUBTEXTURE,
   type CanvasSettings,
   type Document,
@@ -180,10 +183,11 @@ export function deserializeProject(json: string): Result<Document> {
 /**
  * Upgrade a document to `CURRENT_SCHEMA_VERSION`.
  *
- * Accepts schema versions 1 and 2: version 1 documents gain the `guides` and
- * `editor` blocks introduced in version 2 (filled from defaults), every
- * missing or malformed default is repaired, and unknown keys are dropped by
- * rebuilding the document from its known fields. Documents newer than
+ * Accepts schema versions 1 through 3: version 1 documents gain the `guides`
+ * and `editor` blocks introduced in version 2, and every document predating
+ * version 3 gains `generators` and `fxSeed`. Every missing or malformed
+ * default is repaired, and unknown keys are dropped by rebuilding the
+ * document from its known fields. Documents newer than
  * `CURRENT_SCHEMA_VERSION` return `err('unsupported-version', ...)`;
  * unusable versions return `err('invalid-project', ...)`. Never throws.
  *
@@ -191,7 +195,21 @@ export function deserializeProject(json: string): Result<Document> {
  * @returns the canonical current-version document, or the migration error
  */
 
-const CELL_MASK_KINDS = new Set(['all', 'rect', 'rows', 'columns', 'checker', 'band']);
+const CELL_MASK_KINDS = new Set<string>(MASK_KINDS);
+
+/** Mask fields copied verbatim when they carry a usable type. */
+const MASK_NUMERIC_FIELDS = [
+  'x',
+  'y',
+  'w',
+  'h',
+  'rowStart',
+  'rowEnd',
+  'colStart',
+  'colEnd',
+  'cell',
+  'thickness',
+] as const;
 
 /**
  * Repair a saved cell-effect stack.
@@ -225,14 +243,30 @@ function canonicalCellEffects(value: unknown): CellEffectEntry[] {
     }
     if (isPlainObject(raw.mask) && typeof raw.mask.kind === 'string' && CELL_MASK_KINDS.has(raw.mask.kind)) {
       const mask: Record<string, unknown> = { kind: raw.mask.kind };
-      for (const key of ['x', 'y', 'w', 'h', 'rowStart', 'rowEnd', 'colStart', 'colEnd', 'cell', 'thickness']) {
+      for (const key of MASK_NUMERIC_FIELDS) {
         const v = raw.mask[key];
         if (typeof v === 'number' && Number.isFinite(v)) mask[key] = v;
       }
       if (typeof raw.mask.origin === 'string') mask.origin = raw.mask.origin;
+      if (typeof raw.mask.glyphClass === 'string' && GLYPH_CLASSES.includes(raw.mask.glyphClass as GlyphClass)) {
+        mask.glyphClass = raw.mask.glyphClass;
+      }
+      if (typeof raw.mask.hasForeground === 'boolean') mask.hasForeground = raw.mask.hasForeground;
+      if (typeof raw.mask.hasBackground === 'boolean') mask.hasBackground = raw.mask.hasBackground;
       entry.mask = mask as unknown as CellEffectEntry['mask'];
     }
     out.push(entry);
+  }
+  return out;
+}
+
+/** Repair the generator-graph stack: irreparable graphs are dropped. */
+function canonicalGenerators(value: unknown): GeneratorGraph[] {
+  if (!Array.isArray(value)) return [];
+  const out: GeneratorGraph[] = [];
+  for (const raw of value) {
+    const graph = canonicalGeneratorGraph(raw);
+    if (graph) out.push(graph);
   }
   return out;
 }
@@ -276,6 +310,14 @@ export function migrateDocument(doc: Document): Result<Document> {
       timeline: doc.timeline ?? null,
       renderPresets: Array.isArray(doc.renderPresets) ? doc.renderPresets : [],
       themeId: typeof doc.themeId === 'string' ? doc.themeId : 'medieval',
+      // Schema 3: generator graphs and the procedural/cell-effect seed. Both
+      // are repaired rather than rejected - documents from schema 1 and 2 do
+      // not carry them, and a hand-edited seed must never poison the RNG.
+      generators: canonicalGenerators(doc.generators),
+      fxSeed:
+        typeof doc.fxSeed === 'number' && Number.isFinite(doc.fxSeed)
+          ? Math.trunc(doc.fxSeed)
+          : DEFAULT_FX_SEED,
     };
     return ok(next);
   } catch (e) {

@@ -9,6 +9,7 @@ import { createGrid } from '../grid';
 import {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_EXPORT,
+  DEFAULT_FX_SEED,
   DEFAULT_IMAGE_RENDER,
   DEFAULT_SUBTEXTURE,
   DEFAULT_TEXT_RENDER,
@@ -154,12 +155,15 @@ function validateLayer(value: unknown, index: number): Result<Layer> {
     value.kind !== undefined &&
     value.kind !== 'ascii' &&
     value.kind !== 'image' &&
-    value.kind !== 'text'
+    value.kind !== 'text' &&
+    value.kind !== 'creative'
   ) {
-    return err('invalid-project', `${path}.kind must be "ascii", "image" or "text"`);
+    return err('invalid-project', `${path}.kind must be "ascii", "image", "text" or "creative"`);
   }
   if (value.grid === null || value.grid === undefined) {
-    if (value.kind === 'image' || value.kind === 'text') return ok(value as unknown as Layer);
+    if (value.kind === 'image' || value.kind === 'text' || value.kind === 'creative') {
+      return ok(value as unknown as Layer);
+    }
     return err('invalid-project', `${path}.grid must be an AsciiGrid`);
   }
   const grid = validateAsciiGrid(value.grid, `${path}.grid`);
@@ -270,6 +274,9 @@ export function validateDocument(doc: unknown): Result<Document> {
     if (doc.guides !== undefined && !Array.isArray(doc.guides)) {
       return err('invalid-project', 'guides must be an array');
     }
+    if (doc.generators !== undefined && !Array.isArray(doc.generators)) {
+      return err('invalid-project', 'generators must be an array');
+    }
     if (doc.activeLayerId !== undefined && doc.activeLayerId !== null) {
       if (typeof doc.activeLayerId !== 'string') {
         return err('invalid-project', 'activeLayerId must be a string or null');
@@ -329,6 +336,8 @@ export function createDocument(overrides: Partial<Document> = {}): Document {
     timeline: null,
     renderPresets: [],
     themeId: 'medieval',
+    generators: [],
+    fxSeed: DEFAULT_FX_SEED,
   };
   return { ...base, ...overrides };
 }

@@ -2,6 +2,7 @@
 // The store applies the active theme to the document at creation time.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore, selectCrtGlow } from '../../src/store';
+import type { Document } from '../../src/core/types';
 
 describe('view state', () => {
   beforeEach(() => {
@@ -103,5 +104,41 @@ describe('cell effects', () => {
     const doc = { ...useStore.getState().document, cellEffects: [{ effect: 'keyshift' }] };
     useStore.getState().setDocument(doc);
     expect(useStore.getState().cellEffects).toEqual([{ effect: 'keyshift' }]);
+  });
+});
+
+describe('fx seed', () => {
+  it('mirrors the seed into the document so the project file keeps it', () => {
+    useStore.getState().setFxSeed(0x1234);
+    expect(useStore.getState().fxSeed).toBe(0x1234);
+    expect(useStore.getState().document.fxSeed).toBe(0x1234);
+    expect(useStore.getState().isDirty).toBe(true);
+  });
+
+  it('hydrates the seed from a loaded project', () => {
+    const doc = { ...useStore.getState().document, fxSeed: 4242 };
+    useStore.getState().setDocument(doc);
+    expect(useStore.getState().fxSeed).toBe(4242);
+  });
+
+  it('re-syncs the seed from the restored document on undo', () => {
+    useStore.getState().setDocument({ ...useStore.getState().document, fxSeed: 4242 });
+    useStore.getState().setMetadata({ name: 'Step' });
+    useStore.setState({ fxSeed: 999 });
+    useStore.getState().undo();
+    expect(useStore.getState().fxSeed).toBe(4242);
+  });
+
+  it('applies a seed override on a new document', () => {
+    useStore.getState().newDocument({ fxSeed: 77 });
+    expect(useStore.getState().fxSeed).toBe(77);
+    expect(useStore.getState().document.fxSeed).toBe(77);
+  });
+
+  it('falls back to the default seed for documents without one', () => {
+    const legacy = { ...useStore.getState().document } as Record<string, unknown>;
+    delete legacy.fxSeed;
+    useStore.getState().setDocument(legacy as unknown as Document);
+    expect(useStore.getState().fxSeed).toBe(0x5eed);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { composeDocument, composeActiveLayer } from '../../src/core/layer/compose';
 import { createDocument } from '../../src/core/project/schema';
 import { linesToGrid } from '../../src/core/grid';
-import { DEFAULT_SUBTEXTURE } from '../../src/core/types';
+import { DEFAULT_CREATIVE_RENDER, DEFAULT_SUBTEXTURE, type CreativeLayer } from '../../src/core/types';
 
 describe('layer composition', () => {
   it('composes a single ascii layer', () => {
@@ -41,5 +41,28 @@ describe('layer composition', () => {
     doc.layers[0].grid = linesToGrid(['ACTIVE']);
     const out = composeActiveLayer(doc);
     expect(out.chars.slice(0, 6).join('')).toBe('ACTIVE');
+  });
+
+  it('composes a creative layer from its cached grid and skips an empty one', () => {
+    const doc = createDocument();
+    const creative: CreativeLayer = {
+      id: 'creative-1',
+      name: 'Generative',
+      kind: 'creative',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      x: 0,
+      y: 0,
+      graphId: 'graph-1',
+      render: DEFAULT_CREATIVE_RENDER,
+      grid: linesToGrid(['GEN']),
+      cacheKey: '',
+    };
+    doc.layers = [doc.layers[0], creative];
+    expect(composeDocument(doc).chars.slice(0, 3).join('')).toBe('GEN');
+
+    doc.layers = [doc.layers[0], { ...creative, grid: null }];
+    expect(composeDocument(doc).chars.slice(0, 3).join('')).toBe('   ');
   });
 });

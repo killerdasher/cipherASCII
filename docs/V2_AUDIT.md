@@ -265,21 +265,21 @@ Design rules carried into every phase:
 
 ## 7. Phase plan (reference)
 
-| Phase | Deliverable | Depends on |
-|---|---|---|
-| 0 | This audit (`docs/V2_AUDIT.md`) | — |
-| 1 | Core data model: `CellFeatures`, `GlyphFeatureVector`, `GlyphIndex`, `AnalysisField`, `GeneratorGraph`, `CreativeLayer`, `Mask`, ProjectSchema v3 | 0 |
-| 2 | Image analysis: luminance/contrast/edges/texture/frequency/structure/saliency/regional + cache | 1 |
-| 3 | Glyph intelligence: calibration pipeline + index + honest counts | 1 |
-| 4 | Content-aware mapping consuming features | 2, 3 |
-| 5 | Selection, regions, blend modes, unified compositor | 1 |
-| 6 | Generative layer / node graph | 1, 2 |
-| 7 | Effects + animation integration (non-destructive, exportable) | 1, 5 |
-| 8 | Worker pool | 2, 4, 6 |
-| 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 |
-| 10 | Persistence completeness + autosave + native dialogs | 1 |
-| 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 |
-| 12 | Docs, README, benchmarks, screenshots refresh | all |
+| Phase | Deliverable | Depends on | Status |
+|---|---|---|---|
+| 0 | This audit (`docs/V2_AUDIT.md`) | — | done |
+| 1 | Core data model: `CellFeatures`, `GlyphFeatureVector`, `GlyphIndex`, `AnalysisField`, `GeneratorGraph`, `CreativeLayer`, `Mask`, ProjectSchema v3 | 0 | done |
+| 2 | Image analysis: luminance/contrast/edges/texture/frequency/structure/saliency/regional + cache | 1 | pending |
+| 3 | Glyph intelligence: calibration pipeline + index + honest counts | 1 | pending |
+| 4 | Content-aware mapping consuming features | 2, 3 | pending |
+| 5 | Selection, regions, blend modes, unified compositor | 1 | pending |
+| 6 | Generative layer / node graph | 1, 2 | pending |
+| 7 | Effects + animation integration (non-destructive, exportable) | 1, 5 | pending |
+| 8 | Worker pool | 2, 4, 6 | pending |
+| 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 | pending |
+| 10 | Persistence completeness + autosave + native dialogs | 1 | pending |
+| 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | pending |
+| 12 | Docs, README, benchmarks, screenshots refresh | all | pending |
 
 Phase exit rule: typecheck + lint + all tests + demo + bench:engines green, golden
 fixtures regenerated only with intent, README/docs updated in the same commit as the

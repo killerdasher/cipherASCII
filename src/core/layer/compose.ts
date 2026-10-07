@@ -27,6 +27,7 @@ function layerGrid(layer: Layer): AsciiGrid | null {
       return layer.grid;
     case 'image':
     case 'text':
+    case 'creative':
       return layer.grid;
     default:
       return null;
