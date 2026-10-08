@@ -270,7 +270,7 @@ Design rules carried into every phase:
 | 0 | This audit (`docs/V2_AUDIT.md`) | — | done |
 | 1 | Core data model: `CellFeatures`, `GlyphFeatureVector`, `GlyphIndex`, `AnalysisField`, `GeneratorGraph`, `CreativeLayer`, `Mask`, ProjectSchema v3 | 0 | done |
 | 2 | Image analysis: luminance/contrast/edges/texture/frequency/structure/saliency/regional + cache | 1 | done |
-| 3 | Glyph intelligence: calibration pipeline + index + honest counts | 1 | pending |
+| 3 | Glyph intelligence: calibration pipeline + index + honest counts | 1 | done |
 | 4 | Content-aware mapping consuming features | 2, 3 | pending |
 | 5 | Selection, regions, blend modes, unified compositor | 1 | pending |
 | 6 | Generative layer / node graph | 1, 2 | pending |

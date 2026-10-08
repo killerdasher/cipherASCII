@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-967%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-980%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -91,7 +91,8 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 
 ## Features
 
-- **82 character sets / 3,011 unique characters** (48 of them with 16+ levels)
+- **82 character sets / 3,011 unique characters** (48 of them with 16+ levels),
+  all 3,011 calibrated for ink - measured glyph metrics, not guesses
 - **52 dither algorithms** (error diffusion, ordered, blue-noise, halftone, pattern, edge)
 - **20 raster effects** in an ordered, per-layer pipeline (bloom, diffraction
   stars, CRT curvature, chromatic aberration, scanlines, film grain, glitch,
@@ -124,9 +125,10 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
   **Cozy Cafe French**, **Zelda / RPG**
 - **Tailwind CSS v3** utilities bound to the theme's CSS variables, so a theme
   swap recolours every new component at once
-- **Character set engine** (`src/utils/characterSets.js`): `generateRange`,
-  `ASCII_STANDARD`, `CJK_ULTRA_DENSE` (5,000 glyphs) and a canvas-measured
-  `sortCharactersByDensity` for injected text
+- **Calibrated glyph metrics** (`src/core/glyph/`): `npm run calibrate`
+  measures every preset character (ink, bounding box, density, edge ratio,
+  symmetry) into a committed table; the ramp sorts by that measured ink and
+  says how many characters fell back to the coverage table
 - **Canvas drawing tools**: brush, eraser, flood fill, **text** (type straight
   onto the canvas with a floating input, Enter places / Esc cancels),
   character **and colour** picker, and pan (one undo step per stroke)
@@ -270,6 +272,7 @@ GIF's poster frame [docs/images/hero.png](docs/images/hero.png).
 | `npm run bench` | Render / text / dither throughput tables |
 | `npm run bench:engines` | Cell effects, bridge, compositor/diff, tween and stroke ratios |
 | `npm run demo` | Signature animation demo; `DEMO_SEED=7` / `NO_COLOR=1` / `UPDATE_GOLDEN=1` |
+| `npm run calibrate` | Re-measure every preset glyph into `src/core/glyph/calibrationTable.ts` |
 | `npm run simulations` | Dither fidelity, palette recovery, generation protocol, charset stats |
 | `npm run screenshots` | Regenerate `docs/screenshots/theme-*.png` (one per theme) |
 | `npm run hero` | Regenerate `docs/images/hero.gif` + poster; `NO_ENCODE=1` for frames only |
@@ -312,7 +315,9 @@ src/core/            Pure rendering core - never imports UI code
   scene/             Scene timeline, triggers, scene director
   particles/         Pooled particle system (no per-frame allocation)
   fx/                45 cell effects, mask compiler, pipeline, runtime bridge
+  analysis/          Image analysis: fields, saliency, regions, cached pipeline
   charsets/          82 character sets, 3,011 unique characters
+  glyph/             Glyph features, index, committed calibration table
   dither.ts          52 dither algorithms
   mapping.ts         9 tone-mapping strategies + charset presets
   effects/           20-effect raster pipeline
@@ -343,8 +348,9 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 967 tests / 54 files, ~10 s
+npm test                          # 980 tests / 55 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
+npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables
 npm run bench:engines             # effect, compositor, stroke ratios
 npm run simulations               # algorithm simulations

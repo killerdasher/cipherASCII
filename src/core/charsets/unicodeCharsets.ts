@@ -626,13 +626,16 @@ export function characterDensity(ch: string): number {
 }
 
 /**
- * Sort a ramp dark -> light by ink coverage. Stable: characters with equal
- * density keep their original relative order.
+ * Sort a ramp dark -> light by the heuristic coverage table (no rasterising).
+ * Stable: characters with equal density keep their original relative order.
+ * For measured ink - the ordering the ramp UI uses - prefer `sortRampByInk`
+ * from `core/glyph/sort`, which falls back to this table only for glyphs
+ * without a calibration record.
  */
 export function sortCharactersByDensity(chars: string): string {
   return Array.from(chars)
     .map((ch, index) => ({ ch, index, density: characterDensity(ch) }))
-    .sort((a, b) => a.density - b.density || a.index - b.index)
+    .sort((a, b) => b.density - a.density || a.index - b.index)
     .map((entry) => entry.ch)
     .join('');
 }

@@ -108,8 +108,8 @@ describe('character density ordering', () => {
     expect(characterDensity('🙂')).toBe(0.5);
   });
 
-  it('sorts a ramp by density without losing characters', () => {
-    expect(sortCharactersByDensity('@# .')).toBe(' .#@');
+  it('sorts a ramp dark to light without losing characters', () => {
+    expect(sortCharactersByDensity('@# .')).toBe('@#. ');
     const ramp = ' .:-=+*#%@█';
     const sorted = sortCharactersByDensity(ramp);
     expect(sorted.length).toBe(Array.from(ramp).length);
@@ -121,7 +121,7 @@ describe('character density ordering', () => {
     expect(counts(sorted)).toEqual(counts(ramp));
     const glyphs = Array.from(sorted);
     for (let i = 1; i < glyphs.length; i++) {
-      expect(characterDensity(glyphs[i - 1])).toBeLessThanOrEqual(characterDensity(glyphs[i]));
+      expect(characterDensity(glyphs[i - 1])).toBeGreaterThanOrEqual(characterDensity(glyphs[i]));
     }
   });
 

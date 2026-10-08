@@ -1,9 +1,9 @@
 import { useMemo, useState, memo } from 'react';
 import { useStore } from '../store';
 import { Slider } from './Slider';
-import { ALL_CHARSET_PRESETS, CHARSET_CATEGORIES } from '../core/charsets/extendedCharsets';
-import { countUniqueCharacters, sortCharactersByDensity } from '../core/charsets/unicodeCharsets';
-import { sortCharactersByDensity as sortCharactersByMeasuredInk } from '../utils/characterSets.js';
+import { ALL_CHARSET_PRESETS, CHARSET_CATEGORIES, validateCustomCharset } from '../core/charsets/extendedCharsets';
+import { calibrationCoverage } from '../core/glyph/calibration';
+import { sortRampByInk } from '../core/glyph/sort';
 import { listDitherAlgorithms } from '../core/dither';
 import type {
   ImageRenderSettings,
@@ -27,6 +27,7 @@ function AsciiControlsPanelInner() {
   const output = imageSettings.output;
   const [customChars, setCustomChars] = useState(output.charset);
   const [charsetOpen, setCharsetOpen] = useState<string | null>(null);
+  const [charsetError, setCharsetError] = useState<string | null>(null);
 
   const patchOutput = (patch: Partial<MappingOutputSettings>) =>
     setImageSettings({ output: { ...output, ...patch } });
@@ -37,10 +38,14 @@ function AsciiControlsPanelInner() {
   const dithers = useMemo(() => listDitherAlgorithms(), []);
   const ramp = output.charset;
 
-  const stats = useMemo(
-    () => ({ presets: ALL_CHARSET_PRESETS.length, chars: countUniqueCharacters(ALL_CHARSET_PRESETS) }),
-    [],
-  );
+  const stats = useMemo(() => calibrationCoverage(ALL_CHARSET_PRESETS), []);
+  const rampSort = useMemo(() => sortRampByInk(ramp), [ramp]);
+  const sortHint =
+    rampSort.uncalibrated === 0
+      ? `Measured ink for all ${Array.from(ramp).length} characters (calibration table).`
+      : rampSort.source === 'heuristic'
+        ? 'No calibration for these characters — ordered by the coverage table.'
+        : `${rampSort.uncalibrated} uncalibrated character(s) — measured ink where available, coverage table for the rest.`;
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryCategory, setLibraryCategory] = useState<string>('all');
   const libraryChars = useMemo(() => {
@@ -151,7 +156,8 @@ function AsciiControlsPanelInner() {
       <div className="prop-section">
         <h4>Character Set</h4>
         <p className="glyph-hint">
-          {stats.presets} presets · {stats.chars.toLocaleString()} unique characters
+          {stats.presets} presets · {stats.unique.toLocaleString()} unique characters ·{' '}
+          {stats.calibrated.toLocaleString()} calibrated
         </p>
         <select
           value=""
@@ -226,12 +232,17 @@ function AsciiControlsPanelInner() {
               maxLength={10}
               value={customChars}
               placeholder="e.g. @#*+=-:. "
-              onChange={(e) => setCustomChars(e.target.value)}
+              onChange={(e) => {
+                setCustomChars(e.target.value);
+                setCharsetError(null);
+              }}
               onBlur={() => {
-                const v = customChars.slice(0, 10);
-                if (v.length >= 1) patchOutput({ charset: v });
+                const check = validateCustomCharset(customChars.slice(0, 10));
+                setCharsetError(check.ok ? null : check.message ?? 'Invalid charset.');
+                if (check.ok) patchOutput({ charset: check.normalized });
               }}
             />
+            {charsetError && <p className="glyph-hint import-error">{charsetError}</p>}
             <p className="glyph-hint">Type 1–10 characters, dark → light.</p>
           </div>
         )}
@@ -239,28 +250,15 @@ function AsciiControlsPanelInner() {
         <div className="prop-row">
           <button
             type="button"
+            title="Orders the ramp by the ink measured for each glyph in the calibration table"
             onClick={() => {
-              const sorted = sortCharactersByDensity(output.charset);
-              setCustomChars(sorted);
-              patchOutput({ charset: sorted });
+              setCustomChars(rampSort.sorted);
+              patchOutput({ charset: rampSort.sorted });
             }}
           >
             Sort ramp dark → light
           </button>
-          <button
-            type="button"
-            title="Rasterises every glyph on a 24x24 canvas and sorts by measured ink"
-            onClick={() => {
-              const measured = sortCharactersByMeasuredInk(Array.from(output.charset)).join('');
-              setCustomChars(measured);
-              patchOutput({ charset: measured });
-            }}
-          >
-            Sort by measured ink
-          </button>
-          <p className="glyph-hint">
-            Heuristic coverage table, or a canvas measurement for injected text (CJK, emoji).
-          </p>
+          <p className="glyph-hint">{sortHint}</p>
         </div>
       </div>
 

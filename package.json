@@ -34,7 +34,8 @@
     "dist:linux": "npm run build && npm run build:electron && electron-builder --linux --publish never",
     "lint": "eslint .",
     "bench:engines": "vitest run --config vitest.scripts.config.ts scripts/engines.bench.ts",
-    "demo": "vitest run --config vitest.scripts.config.ts scripts/cipher-demo.ts"
+    "demo": "vitest run --config vitest.scripts.config.ts scripts/cipher-demo.ts",
+    "calibrate": "vitest run --config vitest.scripts.config.ts scripts/calibrate-glyphs.ts"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",
