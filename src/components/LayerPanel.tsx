@@ -74,6 +74,7 @@ function LayerPanelInner({ layers, activeLayerId }: LayerPanelProps) {
             visible: true,
             locked: false,
             opacity: 1,
+            blend: 'normal',
             x: 0,
             y: 0,
             grid: createGrid(80, 24),

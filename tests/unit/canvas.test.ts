@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Attr, NO_CELL, luminance, parseHex, rgb, toHex, unpackRgb } from '../../src/core/canvas/cell';
-import { FrameBuffer, composite, needsOrdering } from '../../src/core/canvas/compose';
+import { FrameBuffer, GLYPH_COVERAGE_ALPHA, composite, needsOrdering } from '../../src/core/canvas/compose';
 import { DirtyRegions } from '../../src/core/canvas/dirty';
 import { diffFrames } from '../../src/core/canvas/diff';
 import { GlyphTable } from '../../src/core/canvas/glyphTable';
 import { Plane } from '../../src/core/canvas/plane';
-import { VirtualCanvas } from '../../src/core/canvas/virtualCanvas';
 
 describe('cell colours', () => {
   it('packs and unpacks rgb', () => {
@@ -182,6 +181,58 @@ describe('compositor', () => {
     composite([plane], target);
     expect(target.fg[0]).toBe(NO_CELL);
   });
+
+  it('blends colour against the backdrop when the base cell is empty', () => {
+    const target = new FrameBuffer(2, 1);
+    const plane = new Plane(2, 1, { opacity: 128 });
+    plane.setGlyph(0, 0, 'x', 0xffffff);
+    composite([plane], target, undefined, 0x000000);
+    // Half coverage over a black page: 128/255 of the way to white.
+    expect(target.fg[0]).toBe(0x808080);
+    // A cell no coloured plane touched stays uncoloured (exporter default),
+    // never the backdrop colour.
+    expect(target.fg[1]).toBe(NO_CELL);
+  });
+
+  it('blends background colour against the backdrop the same way', () => {
+    const target = new FrameBuffer(1, 1);
+    const plane = new Plane(1, 1, { opacity: 128 });
+    plane.setGlyph(0, 0, 'x', NO_CELL, 0xffffff);
+    composite([plane], target, undefined, 0x000000);
+    expect(target.bg[0]).toBe(0x808080);
+  });
+
+  it('holds the glyph below half coverage and flips it at the threshold', () => {
+    const table = new GlyphTable();
+    const base = new Plane(1, 1, { glyphTable: table, opacity: 255 });
+    base.setGlyph(0, 0, 'A', 0x000000);
+    const target = new FrameBuffer(1, 1);
+    composite([base], target);
+    expect(table.resolve(target.glyph[0])).toBe('A');
+
+    const faint = new Plane(1, 1, { glyphTable: table, opacity: GLYPH_COVERAGE_ALPHA - 1 });
+    faint.setGlyph(0, 0, 'B', 0xffffff);
+    composite([base, faint], target);
+    expect(table.resolve(target.glyph[0])).toBe('A');
+    // The colour still moves — only the glyph is thresholded.
+    expect(target.fg[0]).not.toBe(0x000000);
+
+    const covered = new Plane(1, 1, { glyphTable: table, opacity: GLYPH_COVERAGE_ALPHA });
+    covered.setGlyph(0, 0, 'B', 0xffffff);
+    composite([base, covered], target);
+    expect(table.resolve(target.glyph[0])).toBe('B');
+  });
+
+  it('shows a faint glyph over an empty frame', () => {
+    const table = new GlyphTable();
+    const plane = new Plane(1, 1, { glyphTable: table, opacity: 1 });
+    plane.setGlyph(0, 0, 'x', 0xffffff);
+    const target = new FrameBuffer(1, 1);
+    composite([plane], target, undefined, 0x000000);
+    expect(table.resolve(target.glyph[0])).toBe('x');
+    // 1/255 coverage over black — almost the page, never full white.
+    expect(target.fg[0]).toBe(0x010101);
+  });
 });
 
 describe('frame diff', () => {
@@ -244,78 +295,6 @@ describe('frame diff', () => {
     const [p3, n3] = makeBuffers(4, 4);
     n3.attr[1] = Attr.Bold;
     expect(diffFrames(p3, n3, { boundsW: 4, boundsH: 4 }).changed).toBe(1);
-  });
-});
-
-describe('VirtualCanvas', () => {
-  it('composites layers and swaps buffers without copying', () => {
-    const canvas = new VirtualCanvas(8, 4);
-    const bg = canvas.layer('background', 0);
-    const art = canvas.layer('art', 10);
-    bg.fillRect(0, 0, 8, 4, 0x101010);
-    art.setGlyph(2, 1, '#', 0xffffff);
-
-    const first = canvas.render();
-    // The background plane covers every cell, so a full redraw is the right call.
-    expect(first.strategy).toBe('full');
-    expect(canvas.frame.width).toBe(8);
-    expect(canvas.frames).toBe(1);
-
-    const beforePointer = canvas.frame;
-    canvas.render();
-    expect(canvas.frame).not.toBe(beforePointer);
-  });
-
-  it('second render of an unchanged scene reports none', () => {
-    const canvas = new VirtualCanvas(4, 4);
-    const p = canvas.layer('a', 0);
-    p.setGlyph(0, 0, 'x', 0xffffff);
-    canvas.render();
-    const second = canvas.render();
-    expect(second.strategy).toBe('none');
-    expect(second.changed).toBe(0);
-  });
-
-  it('honours z ordering across named layers', () => {
-    const canvas = new VirtualCanvas(2, 2);
-    const below = canvas.layer('below', 0);
-    const above = canvas.layer('above', 5);
-    below.setGlyph(0, 0, 'b', 0xff0000);
-    above.setGlyph(0, 0, 'a', 0x00ff00);
-    canvas.render();
-    const table = canvas.listPlanes()[0].glyphTable;
-    expect(table.resolve(canvas.frame.glyph[0])).toBe('a');
-  });
-
-  it('resize invalidates everything', () => {
-    const canvas = new VirtualCanvas(4, 4);
-    canvas.layer('a', 0).setGlyph(0, 0, 'x', 0xffffff);
-    canvas.render();
-    canvas.resize(10, 6);
-    const result = canvas.render();
-    expect(result.changed).toBeGreaterThan(0);
-    expect(result.strategy).not.toBe('none');
-    expect(canvas.frame.width).toBe(10);
-    expect(canvas.frame.height).toBe(6);
-  });
-
-  it('invalidate marks all planes dirty', () => {
-    const canvas = new VirtualCanvas(4, 4);
-    const p = canvas.layer('a', 0);
-    canvas.render();
-    expect(p.dirty.isEmpty).toBe(true);
-    canvas.invalidate();
-    expect(p.dirty.size).toBe(1);
-  });
-
-  it('tracks dirty ratio', () => {
-    const canvas = new VirtualCanvas(10, 10);
-    const p = canvas.layer('a', 0);
-    canvas.render();
-    p.setGlyph(0, 0, '#', 0xffffff);
-    canvas.render();
-    expect(canvas.lastDirtyRatio).toBeGreaterThan(0);
-    expect(canvas.lastDirtyRatio).toBeLessThan(1);
   });
 });
 

@@ -323,6 +323,38 @@ describe('schema version 3', () => {
   });
 });
 
+describe('layer blend persistence', () => {
+  it('round-trips a non-default blend', () => {
+    const doc = createDocument();
+    const layered: Document = {
+      ...doc,
+      layers: [{ ...doc.layers[0], blend: 'multiply' }],
+    };
+    const restored = value(deserializeProject(serializeProject(layered)));
+    expect(restored.layers[0].blend).toBe('multiply');
+  });
+
+  it('defaults layers written without a blend to normal', () => {
+    const raw = JSON.parse(JSON.stringify(createDocument())) as Record<string, unknown>;
+    const layers = raw.layers as Record<string, unknown>[];
+    delete layers[0].blend;
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.layers[0].blend).toBe('normal');
+  });
+
+  it('repairs unknown blend ids to normal', () => {
+    const raw = JSON.parse(JSON.stringify(createDocument())) as Record<string, unknown>;
+    const layers = raw.layers as Record<string, unknown>[];
+    layers[0].blend = 'plaid';
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.layers[0].blend).toBe('normal');
+  });
+
+  it('creates new documents on the default blend', () => {
+    expect(createDocument().layers[0].blend).toBe('normal');
+  });
+});
+
 describe('cell-effect mask persistence', () => {
   const MASK_SAMPLES: MaskSpec[] = [
     { kind: 'all' },

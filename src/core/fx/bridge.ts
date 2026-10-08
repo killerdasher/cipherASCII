@@ -11,6 +11,8 @@
 import type { AsciiGrid } from '../types';
 import { Plane } from '../canvas/plane';
 import { NO_CELL } from '../canvas/cell';
+import type { FrameBuffer } from '../canvas/compose';
+import type { GlyphTable } from '../canvas/glyphTable';
 
 /** Copy an `AsciiGrid` into `plane`, resizing it to the grid first. */
 export function gridToPlane(plane: Plane, grid: AsciiGrid): void {
@@ -56,4 +58,24 @@ export function planeToGrid(plane: Plane, target?: AsciiGrid | null): AsciiGrid 
   }
   if (reuse) return target!;
   return { width: plane.width, height: plane.height, chars, fg, bg };
+}
+
+/**
+ * Resolve a composited {@link FrameBuffer} into an `AsciiGrid`.
+ *
+ * The frame buffer stores glyph *indices* but owns no table, so the caller
+ * passes the `GlyphTable` every plane was built with — the same rule the
+ * compositor itself follows.
+ */
+export function frameToGrid(frame: FrameBuffer, table: GlyphTable): AsciiGrid {
+  const n = frame.width * frame.height;
+  const chars = new Array<string>(n);
+  const fg = new Int32Array(n);
+  const bg = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    chars[i] = table.resolve(frame.glyph[i]);
+    fg[i] = frame.fg[i];
+    bg[i] = frame.bg[i];
+  }
+  return { width: frame.width, height: frame.height, chars, fg, bg };
 }

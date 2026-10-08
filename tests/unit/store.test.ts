@@ -107,6 +107,45 @@ describe('cell effects', () => {
   });
 });
 
+describe('layer render guards (A2)', () => {
+  beforeEach(() => {
+    useStore.getState().newDocument();
+    useStore.setState({ isDirty: false });
+  });
+
+  it('style-only layer updates do not bump the render generation', () => {
+    const gen = useStore.getState().renderGeneration;
+    const layer = useStore.getState().document.layers[0];
+    useStore.getState().updateLayer(layer.id, { opacity: 0.5, blend: 'multiply' });
+    expect(useStore.getState().document.layers[0].opacity).toBe(0.5);
+    expect(useStore.getState().document.layers[0].blend).toBe('multiply');
+    expect(useStore.getState().renderGeneration).toBe(gen);
+  });
+
+  it('text and image source edits do bump the render generation', () => {
+    const layer = useStore.getState().document.layers[0];
+    useStore.getState().updateLayer(layer.id, { text: 'HI' });
+    const genAfterText = useStore.getState().renderGeneration;
+    expect(genAfterText).toBeGreaterThan(0);
+
+    useStore.getState().updateLayer(layer.id, {
+      source: { name: 'px', dataUrl: 'data:image/png;base64,AA==', width: 1, height: 1, mime: 'image/png' },
+    });
+    expect(useStore.getState().renderGeneration).toBeGreaterThan(genAfterText);
+  });
+
+  it('reordering layers is compose-time only', () => {
+    const first = useStore.getState().document.layers[0];
+    const second = { ...first, id: 'layer-2', name: 'Two' };
+    useStore.getState().addLayer(second);
+    const gen = useStore.getState().renderGeneration;
+    useStore.getState().moveLayer(second.id, 0);
+    expect(useStore.getState().document.layers[0].id).toBe(second.id);
+    expect(useStore.getState().document.layers[1].id).toBe(first.id);
+    expect(useStore.getState().renderGeneration).toBe(gen);
+  });
+});
+
 describe('fx seed', () => {
   it('mirrors the seed into the document so the project file keeps it', () => {
     useStore.getState().setFxSeed(0x1234);

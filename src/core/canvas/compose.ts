@@ -59,7 +59,7 @@ export class FrameBuffer {
 }
 
 function blendChannel(base: number, top: number, mode: BlendMode, a: number): number {
-  if (a >= 255 || mode === 'source') return top;
+  if (mode === 'source') return top;
   let mixed: number;
   switch (mode) {
     case 'add':
@@ -74,6 +74,10 @@ function blendChannel(base: number, top: number, mode: BlendMode, a: number): nu
     default:
       mixed = top;
   }
+  // Full alpha takes the blend result directly (for `over` that is `top`,
+  // so plain opacity-1 compositing is unchanged); partial alpha lerps
+  // between the base and the blend result.
+  if (a >= 255) return mixed;
   return (base * (255 - a) + mixed * a) / 255;
 }
 
@@ -99,12 +103,6 @@ export interface CompositorStats {
   visited: number;
 }
 
-/**
- * Composite `planes` (any order; sorted internally by `z`) into `target`.
- *
- * `scratch` is the previous frame so the compositor can report how many cells
- * actually moved — the caller uses that to choose diff vs. full redraw.
- */
 /** True when the input must be filtered and/or sorted before compositing. */
 export function needsOrdering(planes: readonly Plane[]): boolean {
   let prevZ = -Infinity;
@@ -116,10 +114,34 @@ export function needsOrdering(planes: readonly Plane[]): boolean {
   return false;
 }
 
+/**
+ * Effective alpha at or above which a non-space glyph replaces the one below.
+ *
+ * ASCII glyphs cannot cross-fade, so coverage is thresholded: below half the
+ * top cell's glyph stays hidden (its colour still blends at full precision),
+ * at or above it the glyph flips. A cell over an empty frame always shows its
+ * glyph, however faint.
+ */
+export const GLYPH_COVERAGE_ALPHA = 128;
+
+/**
+ * Composite `planes` (any order; sorted internally by `z`) into `target`.
+ *
+ * `scratch` is the previous frame so the compositor can report how many cells
+ * actually moved — the caller uses that to choose diff vs. full redraw.
+ *
+ * `backdrop` is the colour of the page behind the whole frame (the document
+ * background): a coloured cell blending over an empty base blends against it,
+ * so a layer at partial opacity reads as transparency over the page. Cells no
+ * coloured plane ever touched stay `NO_CELL` (uncoloured glyphs keep their
+ * exporter default), and background colours blend against the backdrop the
+ * same way.
+ */
 export function composite(
   planes: readonly Plane[],
   target: FrameBuffer,
   scratch?: FrameBuffer,
+  backdrop: number = NO_CELL,
 ): CompositorStats {
   const ordered: readonly Plane[] = needsOrdering(planes)
     ? planes.filter((p) => p.visible && p.width > 0 && p.height > 0).sort((a, b) => a.z - b.z)
@@ -144,7 +166,8 @@ export function composite(
         for (let x = 0; x < pw; x++) {
           const i = y * target.width + x;
           const a = opacity;
-          target.bg[i] = blendColor(target.bg[i], plane.background, blend, a);
+          const base = target.bg[i] === NO_CELL && backdrop !== NO_CELL ? backdrop : target.bg[i];
+          target.bg[i] = blendColor(base, plane.background, blend, a);
           if (target.alpha[i] < a) target.alpha[i] = a;
         }
       }
@@ -165,12 +188,14 @@ export function composite(
         const a = Math.min(opacity, cellAlpha);
         if (a === 0) continue;
         if (fg !== NO_CELL) {
-          target.fg[i] = blendColor(target.fg[i], fg, blend, a);
+          const base = target.fg[i] === NO_CELL && backdrop !== NO_CELL ? backdrop : target.fg[i];
+          target.fg[i] = blendColor(base, fg, blend, a);
         }
         if (bg !== NO_CELL) {
-          target.bg[i] = blendColor(target.bg[i], bg, blend, a);
+          const base = target.bg[i] === NO_CELL && backdrop !== NO_CELL ? backdrop : target.bg[i];
+          target.bg[i] = blendColor(base, bg, blend, a);
         }
-        if (g !== 0 || target.glyph[i] === 0) {
+        if ((g !== 0 && a >= GLYPH_COVERAGE_ALPHA) || target.glyph[i] === 0) {
           target.glyph[i] = g;
         }
         if (attr !== Attr.None) target.attr[i] = attr;

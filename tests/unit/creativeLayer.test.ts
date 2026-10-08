@@ -21,6 +21,7 @@ function creativeLayer(overrides: Partial<CreativeLayer> = {}): CreativeLayer {
     visible: true,
     locked: false,
     opacity: 1,
+    blend: 'normal',
     x: 0,
     y: 0,
     graphId: 'graph-1',

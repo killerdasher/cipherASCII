@@ -64,7 +64,7 @@ export type Command =
   | {
       type: 'layer/update';
       layerId: LayerId;
-      patch: Partial<Pick<Layer, 'name' | 'visible' | 'locked' | 'opacity' | 'x' | 'y'>>;
+      patch: Partial<Pick<Layer, 'name' | 'visible' | 'locked' | 'opacity' | 'blend' | 'x' | 'y'>>;
     }
   | { type: 'layer/move'; layerId: LayerId; toIndex: number }
   | { type: 'document/metadata'; patch: Partial<ProjectMetadata> }

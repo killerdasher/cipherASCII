@@ -6,6 +6,7 @@
  */
 
 import { createGrid } from '../grid';
+import { resolveLayerBlend } from '../layer/blends';
 import {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_EXPORT,
@@ -160,15 +161,19 @@ function validateLayer(value: unknown, index: number): Result<Layer> {
   ) {
     return err('invalid-project', `${path}.kind must be "ascii", "image", "text" or "creative"`);
   }
+  // Every layer carries a blend id; projects written before it existed (or
+  // carrying a value from the future) normalise to `normal` rather than
+  // failing to load.
+  const blend = resolveLayerBlend(value.blend);
   if (value.grid === null || value.grid === undefined) {
     if (value.kind === 'image' || value.kind === 'text' || value.kind === 'creative') {
-      return ok(value as unknown as Layer);
+      return ok({ ...value, blend } as unknown as Layer);
     }
     return err('invalid-project', `${path}.grid must be an AsciiGrid`);
   }
   const grid = validateAsciiGrid(value.grid, `${path}.grid`);
   if (!grid.ok) return grid;
-  return ok({ ...value, grid: grid.value } as unknown as Layer);
+  return ok({ ...value, blend, grid: grid.value } as unknown as Layer);
 }
 
 /**
@@ -313,6 +318,7 @@ export function createDocument(overrides: Partial<Document> = {}): Document {
     visible: true,
     locked: false,
     opacity: 1,
+    blend: 'normal',
     x: 0,
     y: 0,
     grid: createGrid(DEFAULT_WIDTH, DEFAULT_HEIGHT),

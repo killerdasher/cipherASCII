@@ -12,6 +12,7 @@ function layer(id: string, grid: AsciiGrid, name = id): AsciiLayer {
     visible: true,
     locked: false,
     opacity: 1,
+    blend: 'normal',
     x: 0,
     y: 0,
     grid,

@@ -42,6 +42,13 @@ interface AsciiGrid {
 ```
 
 `composeDocument()` flattens visible layers into the grid the editor paints.
+Every layer is converted to a `Plane` (opacity 0..1 → alpha 0..255, per-layer
+`blend` mode) and run through the **same `composite()` used by the Pixi/FX
+engine** — one compositor for documents, live previews and effects. Space
+cells are fully transparent, cells outside the canvas are clipped, and a
+coloured cell composites against the document background when nothing below it
+touched that cell — while cells no coloured plane touched keep the exporter's
+"unset" (`-1`) default.
 Edits go through `applyCommand()`, so every mutation is undoable and the grid
 identity changes only when content actually changes — the renderer and the
 cell-effect runtime both key off that identity.
@@ -85,9 +92,8 @@ The screen side has a structure-of-arrays model built for animation:
 | `cell.ts` | Packed `0xRRGGBB`, `NO_CELL`, `Attr`, blend modes, luminance. |
 | `plane.ts` | SoA grid with dirty-marking writes (`setCell`/`setGlyph`/`fillRect`), `resize`, `clear`. |
 | `dirty.ts` | `DirtyRegions` — flat `Int32Array` of run rectangles, mergeable, with a collapse budget. |
-| `compose.ts` | `FrameBuffer` + `composite(planes, target, scratch)` — z-ordered, per-plane opacity/blend, standard alpha (0 = transparent). |
+| `compose.ts` | `FrameBuffer` + `composite(planes, target, scratch?, backdrop?)` — z-ordered, per-plane opacity/blend, standard alpha (0 = transparent). `backdrop` is the base colour for cells nothing has painted yet (the document background); glyphs flip over at `GLYPH_COVERAGE_ALPHA` (half coverage) — a faint glyph over an empty frame still shows. |
 | `diff.ts` | `diffFrames(prev, next, bounds)` → `none \| diff \| full` plus changed-cell ratio. |
-| `virtualCanvas.ts` | Double-buffered `VirtualCanvas`: pointer swap between two `FrameBuffer`s, `layer()`, `render()`, `lastDirtyRatio`. |
 
 The compositor resets the target once, then paints each plane in `z` order; the
 previous frame is handed in as `scratch` so the caller learns how many cells

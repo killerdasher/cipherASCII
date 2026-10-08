@@ -490,7 +490,12 @@ export const useStore = create<AppState>()(
         if (next !== document) {
           history.push(next, { key: `layer/update/${layerId}` });
           set({ document: next, isDirty: true });
-          get().triggerRender();
+          // Layer metadata (name/visible/opacity/blend/offset) is resolved at
+          // compose time on the main thread. Re-rendering here would run the
+          // renderer's grid/replace and silently wipe brush strokes on the
+          // active image/text layer (A2) — so only the fields the worker
+          // actually renders from schedule a render.
+          if ('text' in patch || 'source' in patch) get().triggerRender();
         }
       },
 
@@ -500,7 +505,7 @@ export const useStore = create<AppState>()(
         if (next !== document) {
           history.push(next);
           set({ document: next, isDirty: true });
-          get().triggerRender();
+          // Reordering only changes compose order — same A2 rule as updateLayer.
         }
       },
 

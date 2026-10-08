@@ -334,13 +334,24 @@ export const DEFAULT_TEXT_RENDER: TextRenderSettings = {
 
 export type LayerId = string;
 
+/**
+ * How a layer's colours merge with the layers below it.
+ *
+ * `normal` is standard source-over alpha; the rest map onto the engine
+ * compositor's blend modes (see `core/layer/blends.ts`). `replace` writes the
+ * layer's colours as-is and therefore ignores `opacity`.
+ */
+export type LayerBlend = 'normal' | 'multiply' | 'screen' | 'add' | 'replace';
+
 interface LayerBase {
   id: LayerId;
   name: string;
   visible: boolean;
   locked: boolean;
-  /** 0..1 — only meaningful for layers that composite over others. */
+  /** 0..1 — real per-cell alpha applied by the compositor. */
   opacity: number;
+  /** Colour blend used when compositing over the layers below. */
+  blend: LayerBlend;
   /** Cell-space offset of the layer content inside the canvas. */
   x: number;
   y: number;

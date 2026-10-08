@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useStore } from '../store';
-import type { Layer } from '../core/types';
+import type { Layer, LayerBlend } from '../core/types';
+import { LAYER_BLENDS } from '../core/layer/blends';
 import { Slider } from './Slider';
 
 interface PropertyPanelProps {
@@ -12,6 +13,9 @@ function PropertyPanelInner({ layer }: PropertyPanelProps) {
   const { updateLayer } = useStore();
 
   if (!layer) return <div className="property-panel">No layer selected</div>;
+
+  const blendId = layer.blend ?? 'normal';
+  const blendOption = LAYER_BLENDS.find((b) => b.id === blendId) ?? LAYER_BLENDS[0];
 
   return (
     <div className="property-panel">
@@ -48,6 +52,20 @@ function PropertyPanelInner({ layer }: PropertyPanelProps) {
         display={`${Math.round(layer.opacity * 100)}%`}
         onChange={(v) => updateLayer(layer.id, { opacity: v })}
       />
+      <div className="prop-row">
+        <label>Blend:</label>
+        <select
+          value={blendId}
+          title={blendOption.description}
+          onChange={(e) => updateLayer(layer.id, { blend: e.target.value as LayerBlend })}
+        >
+          {LAYER_BLENDS.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="prop-row">
         <label>X Offset:</label>
         <input
