@@ -166,6 +166,27 @@ describe('buildPaletteCommands', () => {
     expect(useStore.getState().tool.activeTool).toBe(before === 'eraser' ? 'brush' : before);
   });
 
+  it('runs: the select tool and the selection clipboard are wired', () => {
+    const find = (id: string) => commands.find((c) => c.id === id)!;
+    find('tool.select').run();
+    expect(useStore.getState().tool.activeTool).toBe('select');
+    find('tool.brush').run();
+
+    for (const id of ['edit.copy', 'edit.cut', 'edit.paste', 'edit.clearSelection']) {
+      expect(find(id)).toBeDefined();
+    }
+    useStore.getState().setSelection({
+      type: 'rectangle',
+      bounds: { x: 0, y: 0, width: 1, height: 1 },
+      mask: null,
+    });
+    find('edit.copy').run();
+    expect(useStore.getState().clipboard).not.toBeNull();
+    // Leave the shared store clean for the other tests.
+    useStore.getState().setSelection(null);
+    useStore.setState({ clipboard: null });
+  });
+
   it('runs: toggling the grid flips showGrid', () => {
     const before = useStore.getState().showGrid;
     commands.find((c) => c.id === 'view.toggle.grid')!.run();

@@ -374,18 +374,13 @@ export interface ImageSource {
 export interface ImageLayer extends LayerBase {
   kind: 'image';
   source: ImageSource | null;
-  settings: ImageRenderSettings;
-  /** Derived cache. Keyed by `cacheKey`. */
   grid: AsciiGrid | null;
-  cacheKey: string;
 }
 
 export interface TextLayer extends LayerBase {
   kind: 'text';
   text: string;
-  settings: TextRenderSettings;
   grid: AsciiGrid | null;
-  cacheKey: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -974,35 +969,26 @@ export interface ViewportState {
   rotation: number;
 }
 
+/**
+ * Active document selection.
+ *
+ * `bounds` is the cell-space rectangle everything operates inside; `null`
+ * means nothing is selected (and therefore no editing is restricted).
+ * `mask` refines the rectangle: when present it has `width * height` bytes
+ * indexed row-major from the bounds origin, `1` = cell selected. A `null`
+ * mask selects the whole rectangle.
+ */
 export interface SelectionState {
-  type: 'rectangle' | 'lasso' | 'magicWand';
+  /** Rectangle marquee, or a region picked by click (flood / magic wand). */
+  type: 'rectangle' | 'region';
   bounds: { x: number; y: number; width: number; height: number } | null;
-  layerIds: string[];
+  mask: Uint8Array | null;
 }
 
 export interface ToolState {
-  activeTool: 'select' | 'brush' | 'eraser' | 'fill' | 'text' | 'line' | 'rect' | 'ellipse' | 'eyedropper' | 'pan' | 'zoom';
+  activeTool: 'select' | 'brush' | 'eraser' | 'fill' | 'text' | 'eyedropper' | 'pan';
   brushSize: number;
   /** Single character written by the brush/fill tools (first code point). */
   brushChar: string;
-  brushOpacity: number;
-  brushHardness: number;
   foregroundColor: number;
-  backgroundColor: number;
-}
-
-// ============================================================================
-// Extended Document with new features
-// ============================================================================
-
-export interface DocumentExtensions {
-  paletteId?: string;
-  effectsPipeline: EffectsPipeline;
-  cellEffects?: CellEffectEntry[];
-  timeline?: Timeline;
-  renderPresets: RenderPreset[];
-  viewport: ViewportState;
-  selection: SelectionState;
-  tool: ToolState;
-  themeId: string;
 }

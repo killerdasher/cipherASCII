@@ -114,11 +114,15 @@ collapses to a single full-screen rectangle — cheaper than 500 tiny ones.
 
 `EditorCanvas.tsx` paints the composed grid to a 2D canvas each time its inputs
 change (`composedGrid`, the cell-effect grid, zoom, grid overlay, theme,
-onion-skin, CRT toggle):
+onion-skin, CRT toggle, selection):
 
 * the backing store is resized **only when the dimensions change**;
 * grid lines are stroked in a **single path**;
 * `fillStyle` is assigned per colour **run**, not per cell;
+* the active selection is a dashed outline drawn **after** the effects so a
+  tinted preview never hides it (rectangles stroke their bounds, regions
+  stroke the mask contour); the same selection clips the brush and fill
+  tools through `core/draw.ts` / `core/selection.ts`;
 * subtexture and CRT bloom run last (the GPU viewport skips the CPU bloom
   because the Pixi shader already does it).
 

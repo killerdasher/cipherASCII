@@ -2,6 +2,8 @@ import { Suspense, lazy, useCallback, useRef, useEffect, useMemo, useState } fro
 import { CELL_SIZE, type AsciiGrid, type Document, type Layer } from '../core/types';
 import { composeDocument } from '../core/layer/compose';
 import { cloneGrid, getCell, overlayGrid } from '../core/grid';
+import { floodFill, stampInPlace, walkLine } from '../core/draw';
+import { rectFromPoints, rectSelection, regionSelectionFromSeed, selectionClip } from '../core/selection';
 import { renderTextToGrid } from '../core/text';
 import { applySubtexture, shouldApplySubtexture } from '../core/subtexture';
 import { applyTimelineToDocument, getOnionSkinFrames } from '../core/timeline/timeline';
@@ -32,115 +34,18 @@ const NO_COLOR = -1;
  */
 let rasterRev = 0;
 
-/**
- * Write one cell into a grid the caller already owns.
- *
- * Returns whether anything changed. The stroke path clones the layer grid
- * exactly once when the pointer goes down and then mutates that clone, so a
- * brush costs O(1) allocations per stroke instead of O(cells) per cell.
- */
-function paintCellInPlace(grid: AsciiGrid, x: number, y: number, ch: string, color: number): boolean {
-  if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return false;
-  const c = ch.length === 0 ? ' ' : [...ch][0];
-  const i = y * grid.width + x;
-  const current = grid.fg ? grid.fg[i] : NO_COLOR;
-  if (grid.chars[i] === c && current === color) return false;
-  grid.chars[i] = c;
-  if (grid.fg) {
-    grid.fg[i] = color;
-  } else if (color !== NO_COLOR) {
-    grid.fg = new Int32Array(grid.width * grid.height).fill(NO_COLOR);
-    grid.fg[i] = color;
-  }
-  return true;
-}
-
-/** Stamp a square brush of `size` cells centred on (cx, cy), in place. */
-function stampInPlace(
-  grid: AsciiGrid,
-  cx: number,
-  cy: number,
-  size: number,
-  ch: string,
-  color: number,
-): boolean {
-  const radius = Math.floor((Math.max(1, size) - 1) / 2);
-  let changed = false;
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      if (paintCellInPlace(grid, cx + dx, cy + dy, ch, color)) changed = true;
-    }
-  }
-  return changed;
-}
-
-/** Bresenham line so fast pointer moves leave no gaps in the stroke. */
-function walkLine(
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  visit: (x: number, y: number) => void,
-): void {
-  let x = x0;
-  let y = y0;
-  const dx = Math.abs(x1 - x0);
-  const dy = -Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1;
-  const sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy;
-  for (;;) {
-    visit(x, y);
-    if (x === x1 && y === y1) break;
-    const e2 = 2 * err;
-    if (e2 >= dy) {
-      err += dy;
-      x += sx;
-    }
-    if (e2 <= dx) {
-      err += dx;
-      y += sy;
-    }
-  }
-}
-
-/** 4-connected flood fill by character; returns the input grid when nothing changed. */
-function floodFill(
-  grid: AsciiGrid,
-  startX: number,
-  startY: number,
-  ch: string,
-  color: number,
-): AsciiGrid {
-  if (startX < 0 || startY < 0 || startX >= grid.width || startY >= grid.height) return grid;
-  const i0 = startY * grid.width + startX;
-  const target = grid.chars[i0];
-  const targetColor = grid.fg ? grid.fg[i0] : NO_COLOR;
-  if (target === ch && targetColor === color) return grid;
-  const next = cloneGrid(grid);
-  if (!next.fg) next.fg = new Int32Array(grid.width * grid.height).fill(NO_COLOR);
-  const stack: number[] = [i0];
-  while (stack.length > 0) {
-    const i = stack.pop() as number;
-    if (next.chars[i] !== target) continue;
-    next.chars[i] = ch;
-    next.fg[i] = color;
-    const x = i % grid.width;
-    const y = (i - x) / grid.width;
-    if (x > 0) stack.push(i - 1);
-    if (x + 1 < grid.width) stack.push(i + 1);
-    if (y > 0) stack.push(i - grid.width);
-    if (y + 1 < grid.height) stack.push(i + grid.width);
-  }
-  return next;
-}
-
 export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: EditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const previewGridRef = useRef<AsciiGrid | null>(null);
   const lastCellRef = useRef<{ x: number; y: number } | null>(null);
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  // Select tool: drag state for the rectangle marquee. A ref (not store
+  // state) so hovering costs no re-render — the rect is drawn straight from
+  // `paint()` and the finished selection is committed once on pointer-up.
+  const marqueeRef = useRef<{ anchor: { x: number; y: number }; current: { x: number; y: number } } | null>(
+    null,
+  );
   const [previewGrid, setPreviewGrid] = useState<AsciiGrid | null>(null);
   // Text tool: anchor cell + raw input. The rendered stamp flows through the
   // same previewGrid the brush uses, so the canvas shows the real thing while
@@ -154,6 +59,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   const crtGlow = useStore((s) => s.crtGlow);
   const gpuPreview = useStore((s) => s.gpuPreview);
   const tool = useStore((s) => s.tool);
+  const selection = useStore((s) => s.selection);
   const timeline = useStore((s) => s.timeline);
   const cellEffects = useStore((s) => s.cellEffects);
   const fxSeed = useStore((s) => s.fxSeed);
@@ -248,11 +154,6 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     previewGridRef.current = next;
     setPreviewGrid(next);
   }, [textAnchor, textValue, textSettings, activeLayer, foregroundColor, brushChar]);
-
-  // Switching away from the text tool abandons an unplaced box.
-  useEffect(() => {
-    if (textAnchor && tool.activeTool !== 'text') cancelText();
-  }, [tool.activeTool]);
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
@@ -390,13 +291,71 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       ctx.restore();
     }
 
+    // Selection outline — drawn after the effects so a tinted preview or the
+    // CRT bloom never hides it. Static dashes (no idle rAF just to animate
+    // marching ants): a rectangle strokes its bounds, a region strokes the
+    // mask contour — every edge between a selected and an unselected cell.
+    // While a marquee drag is in progress it replaces the committed outline.
+    const marquee = marqueeRef.current;
+    const outline = marquee
+      ? rectFromPoints(marquee.anchor.x, marquee.anchor.y, marquee.current.x, marquee.current.y)
+      : selection.bounds;
+    if (outline) {
+      ctx.save();
+      ctx.strokeStyle = readVar('--accent', '#3b82f6');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      if (marquee || selection.type === 'rectangle' || !selection.mask) {
+        ctx.strokeRect(
+          outline.x * cellW + 0.5,
+          outline.y * cellH + 0.5,
+          outline.width * cellW - 1,
+          outline.height * cellH - 1,
+        );
+      } else {
+        const mask = selection.mask;
+        const inside = (mx: number, my: number, ox: number, oy: number): boolean => {
+          const nx = mx + ox;
+          const ny = my + oy;
+          if (nx < 0 || ny < 0 || nx >= outline.width || ny >= outline.height) return false;
+          return mask[ny * outline.width + nx] === 1;
+        };
+        ctx.beginPath();
+        for (let my = 0; my < outline.height; my++) {
+          for (let mx = 0; mx < outline.width; mx++) {
+            if (mask[my * outline.width + mx] !== 1) continue;
+            const x0 = (outline.x + mx) * cellW;
+            const y0 = (outline.y + my) * cellH;
+            if (!inside(mx, my, 0, -1)) {
+              ctx.moveTo(x0, y0);
+              ctx.lineTo(x0 + cellW, y0);
+            }
+            if (!inside(mx, my, 1, 0)) {
+              ctx.moveTo(x0 + cellW, y0);
+              ctx.lineTo(x0 + cellW, y0 + cellH);
+            }
+            if (!inside(mx, my, 0, 1)) {
+              ctx.moveTo(x0, y0 + cellH);
+              ctx.lineTo(x0 + cellW, y0 + cellH);
+            }
+            if (!inside(mx, my, -1, 0)) {
+              ctx.moveTo(x0, y0);
+              ctx.lineTo(x0, y0 + cellH);
+            }
+          }
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Hand the finished raster to the GPU viewport (if one is watching).
     canvas.dataset.rasterRev = String(++rasterRev);
 
     // Paint is the dominant per-frame cost, so it is what the adaptive
     // controller listens to (the effect loop reports its own cost too).
     adaptiveRef.current = observeFrame(adaptiveRef.current, performance.now() - paintStart, budget.targetMs);
-  }, [composedGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview, qualityMode]);
+  }, [composedGrid, onionGrids, timeline, zoomLevel, showGrid, themeId, document, crtGlow, gpuPreview, qualityMode, selection]);
 
   // React-driven paints: document edits, zoom, theme switches, tool changes.
   // The effect loop below calls `paint` directly, because pushing 60 fps
@@ -404,6 +363,17 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   useEffect(() => {
     paint();
   }, [paint]);
+
+  // Switching away from the text tool abandons an unplaced box; switching
+  // away from the select tool abandons a half-dragged marquee. (Lives below
+  // `paint` because the marquee branch repaints from it.)
+  useEffect(() => {
+    if (textAnchor && tool.activeTool !== 'text') cancelText();
+    if (marqueeRef.current && tool.activeTool !== 'select') {
+      marqueeRef.current = null;
+      paint();
+    }
+  }, [tool.activeTool]);
 
   // Cell-effect playback: advance the runtime at frame rate and repaint
   // straight from the frame callback. The runtime runs in *loop* mode, so a
@@ -519,6 +489,13 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       return;
     }
 
+    if (activeTool === 'select') {
+      const cell = cellAt(e);
+      capture(e);
+      marqueeRef.current = { anchor: cell, current: cell };
+      return;
+    }
+
     if (!activeLayer) {
       store.setStatusMessage('No active layer - add one in Layers');
       return;
@@ -561,7 +538,14 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     }
 
     if (activeTool === 'fill') {
-      const filled = floodFill(base, cell.x, cell.y, store.tool.brushChar, store.tool.foregroundColor);
+      const filled = floodFill(
+        base,
+        cell.x,
+        cell.y,
+        store.tool.brushChar,
+        store.tool.foregroundColor,
+        selectionClip(store.selection),
+      );
       if (filled !== base) {
         store.applyCommand({ type: 'grid/paint', layerId: activeLayer.id, grid: filled });
         store.setStatusMessage('Region filled (Ctrl+Z to undo)');
@@ -574,7 +558,7 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       const color = activeTool === 'eraser' ? NO_COLOR : store.tool.foregroundColor;
       // One clone for the whole stroke; every later cell mutates it in place.
       const start = cloneGrid(base);
-      stampInPlace(start, cell.x, cell.y, store.tool.brushSize, ch, color);
+      stampInPlace(start, cell.x, cell.y, store.tool.brushSize, ch, color, selectionClip(store.selection));
       previewGridRef.current = start;
       lastCellRef.current = cell;
       setPreviewGrid(start);
@@ -590,6 +574,18 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
       return;
     }
 
+    // Live marquee: track the pointer and repaint straight from the event —
+    // the ref never touches React state, so a drag costs no re-renders.
+    const marquee = marqueeRef.current;
+    if (marquee) {
+      const cell = cellAt(e);
+      if (cell.x !== marquee.current.x || cell.y !== marquee.current.y) {
+        marquee.current = cell;
+        paint();
+      }
+      return;
+    }
+
     const last = lastCellRef.current;
     const base = previewGridRef.current;
     if (!last || !base) return;
@@ -602,8 +598,9 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
     if (cell.x === last.x && cell.y === last.y) return;
     const ch = activeTool === 'eraser' ? ' ' : store.tool.brushChar;
     const color = activeTool === 'eraser' ? NO_COLOR : store.tool.foregroundColor;
+    const clip = selectionClip(store.selection);
     walkLine(last.x, last.y, cell.x, cell.y, (x, y) => {
-      stampInPlace(base, x, y, store.tool.brushSize, ch, color);
+      stampInPlace(base, x, y, store.tool.brushSize, ch, color, clip);
     });
     lastCellRef.current = cell;
     // New object identity so React recomputes the preview; the arrays are
@@ -614,6 +611,39 @@ export function EditorCanvas({ document, activeLayer, showGrid, zoomLevel }: Edi
   const finishStroke = () => {
     if (panRef.current) {
       panRef.current = null;
+      return;
+    }
+    const marquee = marqueeRef.current;
+    if (marquee) {
+      marqueeRef.current = null;
+      const store = useStore.getState();
+      const { anchor, current } = marquee;
+      if (anchor.x === current.x && anchor.y === current.y) {
+        // Click without drag: select the region this cell's flood would fill
+        // (magic-wand). Needs a grid to measure; rectangles do not.
+        const grid = activeLayer?.grid;
+        if (!grid) {
+          store.setStatusMessage('Select an ASCII layer to pick a region');
+        } else {
+          const region = regionSelectionFromSeed(grid, current.x, current.y);
+          store.setSelection(region);
+          store.setStatusMessage(
+            region.bounds
+              ? `Region selected ${region.bounds.width}×${region.bounds.height} (Esc clears)`
+              : 'Nothing to select',
+          );
+        }
+      } else {
+        store.setSelection(
+          rectSelection(
+            rectFromPoints(anchor.x, anchor.y, current.x, current.y),
+            document.canvas.width,
+            document.canvas.height,
+          ),
+        );
+        store.setStatusMessage('Selection set (Esc clears)');
+      }
+      paint();
       return;
     }
     const grid = previewGridRef.current;

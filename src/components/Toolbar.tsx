@@ -2,6 +2,11 @@ import type { ToolState } from '../core/types';
 
 const TOOLS = [
   {
+    id: 'select',
+    label: 'Select — drag a rectangle, click a region (S)',
+    icon: <rect x="4" y="4" width="16" height="16" rx="1" strokeDasharray="5 4" />,
+  },
+  {
     id: 'brush',
     label: 'Brush (B)',
     icon: (

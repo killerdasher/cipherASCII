@@ -273,6 +273,7 @@ const {
       // Unmodified letters select the drawing tool.
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const toolByKey: Record<string, ToolState['activeTool']> = {
+          s: 'select',
           b: 'brush',
           e: 'eraser',
           f: 'fill',
@@ -291,6 +292,33 @@ const {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) redo(); else undo();
+      }
+      // `!shiftKey` keeps the devtools element picker (Ctrl+Shift+C) alive.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) {
+        e.preventDefault();
+        useStore.getState().copySelection();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        useStore.getState().cutSelection();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        useStore.getState().pasteClipboard();
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const st = useStore.getState();
+        if (st.selection.bounds) {
+          e.preventDefault();
+          st.deleteSelection();
+        }
+      }
+      if (e.key === 'Escape') {
+        const st = useStore.getState();
+        if (st.selection.bounds) {
+          st.setSelection(null);
+          st.setStatusMessage('Selection cleared');
+        }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();

@@ -12,6 +12,7 @@ import type { PerfStats } from '../core/perf/stats';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import type {
+  AsciiGrid,
   Document,
   Layer,
   LayerId,
@@ -33,6 +34,7 @@ import type {
   EffectId,
 } from '../core/types';
 import { ASPECT_PRESETS, DEFAULT_FX_SEED } from '../core/types';
+import { clearSelection, emptySelection, extractSelection, pasteGrid } from '../core/selection';
 import { columnsForImageWidth } from '../core/renderImage';
 import { createDocument } from '../core/project/schema';
 import { applyCommand, type Command } from '../core/history/commands';
@@ -141,6 +143,8 @@ export interface AppState {
   // Viewport & Selection
   viewport: ViewportState;
   selection: SelectionState;
+  /** Cut/copied cells awaiting paste — view state, not part of the document. */
+  clipboard: AsciiGrid | null;
   tool: ToolState;
 
   // Terminal preview
@@ -253,8 +257,16 @@ export interface AppState {
   setStatusMessage: (msg: string) => void;
   setRenderAnalysis: (analysis: RenderAnalysis | null) => void;
   setViewport: (viewport: Partial<ViewportState>) => void;
-  setSelection: (selection: Partial<SelectionState>) => void;
+  /** Replace the selection; `null` clears it. */
+  setSelection: (selection: SelectionState | null) => void;
   setTool: (tool: Partial<ToolState>) => void;
+
+  // Selection clipboard — cut/copy/paste act on the active layer's grid and
+  // commit as one undoable `grid/paint`; copy alone only fills `clipboard`.
+  copySelection: () => void;
+  cutSelection: () => void;
+  pasteClipboard: () => void;
+  deleteSelection: () => void;
 
   setTerminalMode: (enabled: boolean) => void;
   setTerminalSize: (cols: number, rows: number) => void;
@@ -317,6 +329,22 @@ export const useStore = create<AppState>()(
     const renderSettingsChanged = (a: Document, b: Document): boolean =>
       !deepEqual(a.imageSettings, b.imageSettings) || !deepEqual(a.textSettings, b.textSettings);
 
+    // Active layer grid for clipboard ops. `writable` applies the drawing
+    // tools' lock guard — copy is a read and ignores it.
+    const clipboardTarget = (writable: boolean): { layer: Layer; grid: AsciiGrid } | null => {
+      const st = get();
+      const layer = st.document.layers.find((l) => l.id === st.document.activeLayerId);
+      if (!layer || !layer.grid) {
+        st.setStatusMessage('Select an ASCII layer first');
+        return null;
+      }
+      if (writable && layer.locked) {
+        st.setStatusMessage('Layer is locked - unlock it in Layers');
+        return null;
+      }
+      return { layer, grid: layer.grid };
+    };
+
     return {
       document: initialDocument,
       history: new History(initialDocument, { limit: 200, coalesceWindowMs: 800 }),
@@ -357,15 +385,13 @@ export const useStore = create<AppState>()(
       perfStats: null,
 
       viewport: { x: 0, y: 0, zoom: 1, rotation: 0 },
-      selection: { type: 'rectangle', bounds: null, layerIds: [] },
+      selection: emptySelection(),
+      clipboard: null,
       tool: {
         activeTool: 'brush',
         brushSize: 1,
         brushChar: '#',
-        brushOpacity: 1,
-        brushHardness: 1,
         foregroundColor: 0xd4a53c,
-        backgroundColor: 0xffffff,
       },
 
       terminalMode: false,
@@ -380,6 +406,8 @@ export const useStore = create<AppState>()(
           history: new History(doc, { limit: 200, coalesceWindowMs: 800 }),
           isDirty: false,
           fileHandle: null,
+          // The selection belongs to the old document; the clipboard does not.
+          selection: emptySelection(),
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
           fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
@@ -393,6 +421,7 @@ export const useStore = create<AppState>()(
           history: new History(doc, { limit: 200, coalesceWindowMs: 800 }),
           isDirty: false,
           fileHandle: handle ?? null,
+          selection: emptySelection(),
           // A loaded project carries its own effects stack.
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
@@ -894,8 +923,76 @@ export const useStore = create<AppState>()(
       setRenderAnalysis: (analysis) => set({ renderAnalysis: analysis }),
 
       setViewport: (viewport) => set((s) => ({ viewport: { ...s.viewport, ...viewport } })),
-      setSelection: (selection) => set((s) => ({ selection: { ...s.selection, ...selection } })),
+      setSelection: (selection) => set({ selection: selection ?? emptySelection() }),
       setTool: (tool) => set((s) => ({ tool: { ...s.tool, ...tool } })),
+
+      copySelection: () => {
+        const st = get();
+        const target = clipboardTarget(false);
+        const stamp = target ? extractSelection(target.grid, st.selection) : null;
+        if (!stamp) {
+          st.setStatusMessage(st.selection.bounds ? 'Nothing to copy' : 'Nothing selected');
+          return;
+        }
+        set({ clipboard: stamp });
+        st.setStatusMessage(`Copied ${stamp.width}×${stamp.height} cells`);
+      },
+
+      cutSelection: () => {
+        const st = get();
+        if (!st.selection.bounds) {
+          st.setStatusMessage('Nothing selected');
+          return;
+        }
+        const target = clipboardTarget(true);
+        if (!target) return;
+        const stamp = extractSelection(target.grid, st.selection);
+        const cleared = clearSelection(target.grid, st.selection);
+        if (stamp) set({ clipboard: stamp });
+        if (cleared === target.grid) {
+          st.setStatusMessage('Selection is already blank');
+          return;
+        }
+        get().applyCommand({ type: 'grid/paint', layerId: target.layer.id, grid: cleared });
+        st.setStatusMessage('Cut to clipboard (Ctrl+V pastes back, Ctrl+Z undoes)');
+      },
+
+      pasteClipboard: () => {
+        const st = get();
+        if (!st.clipboard) {
+          st.setStatusMessage('Clipboard is empty');
+          return;
+        }
+        const target = clipboardTarget(true);
+        if (!target) return;
+        // Paste where the selection is (so cut → paste restores in place),
+        // otherwise at the top-left corner.
+        const at = st.selection.bounds ?? { x: 0, y: 0 };
+        const pasted = pasteGrid(target.grid, st.clipboard, at.x, at.y);
+        if (pasted === target.grid) {
+          st.setStatusMessage('Paste had no effect');
+          return;
+        }
+        get().applyCommand({ type: 'grid/paint', layerId: target.layer.id, grid: pasted });
+        st.setStatusMessage('Pasted (Ctrl+Z to undo)');
+      },
+
+      deleteSelection: () => {
+        const st = get();
+        if (!st.selection.bounds) {
+          st.setStatusMessage('Nothing selected');
+          return;
+        }
+        const target = clipboardTarget(true);
+        if (!target) return;
+        const cleared = clearSelection(target.grid, st.selection);
+        if (cleared === target.grid) {
+          st.setStatusMessage('Selection is already blank');
+          return;
+        }
+        get().applyCommand({ type: 'grid/paint', layerId: target.layer.id, grid: cleared });
+        st.setStatusMessage('Selection cleared (Ctrl+Z to undo)');
+      },
 
       setQualityMode: (mode) => set({ qualityMode: mode }),
       toggleDebugOverlay: () => set((s) => ({ debugOverlay: !s.debugOverlay })),

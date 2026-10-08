@@ -165,15 +165,23 @@ function validateLayer(value: unknown, index: number): Result<Layer> {
   // carrying a value from the future) normalise to `normal` rather than
   // failing to load.
   const blend = resolveLayerBlend(value.blend);
+  // Image/text layers dropped their per-layer `settings`/`cacheKey` (the
+  // phantom fields the audit flagged) — strip the tombstones so projects
+  // written by older builds load clean. The creative layer keeps its cache key.
+  const cleaned = { ...value };
+  if (value.kind === 'image' || value.kind === 'text') {
+    delete cleaned.settings;
+    delete cleaned.cacheKey;
+  }
   if (value.grid === null || value.grid === undefined) {
     if (value.kind === 'image' || value.kind === 'text' || value.kind === 'creative') {
-      return ok({ ...value, blend } as unknown as Layer);
+      return ok({ ...cleaned, blend } as unknown as Layer);
     }
     return err('invalid-project', `${path}.grid must be an AsciiGrid`);
   }
   const grid = validateAsciiGrid(value.grid, `${path}.grid`);
   if (!grid.ok) return grid;
-  return ok({ ...value, blend, grid: grid.value } as unknown as Layer);
+  return ok({ ...cleaned, blend, grid: grid.value } as unknown as Layer);
 }
 
 /**

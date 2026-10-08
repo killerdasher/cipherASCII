@@ -4,7 +4,6 @@
  * beyond the actions handed in by the caller.
  */
 
-import { DEFAULT_IMAGE_RENDER } from '../core/types';
 import type { ImageLayer, ImageSource, Layer, Raster } from '../core/types';
 import { lumaPlane } from '../core/image/raster';
 import { analyzeLumaChunked, type RenderAnalysis } from '../core/analyze';
@@ -50,9 +49,7 @@ export function createImageLayer(source: ImageSource): ImageLayer {
     x: 0,
     y: 0,
     source,
-    settings: { ...DEFAULT_IMAGE_RENDER },
     grid: null,
-    cacheKey: '',
   };
 }
 

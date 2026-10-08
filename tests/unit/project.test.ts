@@ -355,6 +355,47 @@ describe('layer blend persistence', () => {
   });
 });
 
+describe('phantom layer fields (A7)', () => {
+  function rawProject(): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(createDocument())) as Record<string, unknown>;
+  }
+
+  it('strips image-layer settings and cacheKey written by older builds', () => {
+    const raw = rawProject();
+    const layers = raw.layers as Record<string, unknown>[];
+    layers[0] = {
+      ...layers[0],
+      kind: 'image',
+      source: { name: 'a.png', dataUrl: 'data:image/png;base64,AA==', width: 1, height: 1, mime: 'image/png' },
+      settings: { mapping: 'luminance' },
+      cacheKey: 'stale-key',
+      grid: null,
+    };
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.layers[0]).not.toHaveProperty('settings');
+    expect(restored.layers[0]).not.toHaveProperty('cacheKey');
+    expect(restored.layers[0].kind).toBe('image');
+  });
+
+  it('strips the same fields from text layers', () => {
+    const raw = rawProject();
+    const layers = raw.layers as Record<string, unknown>[];
+    layers[0] = { ...layers[0], kind: 'text', text: 'hi', settings: {}, cacheKey: 'x', grid: null };
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect(restored.layers[0]).not.toHaveProperty('settings');
+    expect(restored.layers[0]).not.toHaveProperty('cacheKey');
+    expect(restored.layers[0].kind).toBe('text');
+  });
+
+  it('keeps the creative layer cache key (Phase 6 renders through it)', () => {
+    const raw = rawProject();
+    const layers = raw.layers as Record<string, unknown>[];
+    layers[0] = { ...layers[0], kind: 'creative', grid: null, cacheKey: 'kept' };
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    expect((restored.layers[0] as unknown as Record<string, unknown>).cacheKey).toBe('kept');
+  });
+});
+
 describe('cell-effect mask persistence', () => {
   const MASK_SAMPLES: MaskSpec[] = [
     { kind: 'all' },

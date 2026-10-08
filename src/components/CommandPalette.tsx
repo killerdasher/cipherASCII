@@ -52,6 +52,38 @@ export function buildPaletteCommands(): CommandDef[] {
   // --- Edit ----------------------------------------------------------------
   add({ id: 'edit.undo', title: 'Undo', group: 'Edit', shortcut: 'Ctrl+Z', run: () => s().undo() });
   add({ id: 'edit.redo', title: 'Redo', group: 'Edit', shortcut: 'Ctrl+Shift+Z', run: () => s().redo() });
+  add({
+    id: 'edit.copy',
+    title: 'Copy selection',
+    group: 'Edit',
+    shortcut: 'Ctrl+C',
+    keywords: ['selection cells'],
+    run: () => s().copySelection(),
+  });
+  add({
+    id: 'edit.cut',
+    title: 'Cut selection',
+    group: 'Edit',
+    shortcut: 'Ctrl+X',
+    keywords: ['selection cells'],
+    run: () => s().cutSelection(),
+  });
+  add({
+    id: 'edit.paste',
+    title: 'Paste clipboard',
+    group: 'Edit',
+    shortcut: 'Ctrl+V',
+    keywords: ['clipboard cells'],
+    run: () => s().pasteClipboard(),
+  });
+  add({
+    id: 'edit.clearSelection',
+    title: 'Clear selection',
+    group: 'Edit',
+    shortcut: 'Delete',
+    keywords: ['erase selection cells'],
+    run: () => s().deleteSelection(),
+  });
 
   // --- View: docks ---------------------------------------------------------
   const leftPanels: Array<[LeftPanelId, string, string]> = [
@@ -117,6 +149,7 @@ export function buildPaletteCommands(): CommandDef[] {
 
   // --- Tools ---------------------------------------------------------------
   const tools: Array<[ToolState['activeTool'], string, string]> = [
+    ['select', 'Select', 's marquee rectangle region wand'],
     ['brush', 'Brush', 'b draw paint'],
     ['eraser', 'Eraser', 'e clear'],
     ['fill', 'Flood fill', 'f bucket'],

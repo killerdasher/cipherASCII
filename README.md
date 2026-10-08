@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-1013%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-1059%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -131,9 +131,12 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
   symmetry) into a committed table; the ramp sorts by that measured ink
   (button or render-time **Order by measured ink**) and says how many
   characters fell back to the coverage table
-- **Canvas drawing tools**: brush, eraser, flood fill, **text** (type straight
-  onto the canvas with a floating input, Enter places / Esc cancels),
-  character **and colour** picker, and pan (one undo step per stroke)
+- **Canvas drawing tools**: **select** (drag a rectangle, click to grab a
+  region; brush, fill and the clipboard honour it), brush, eraser, flood
+  fill, **text** (type straight onto the canvas with a floating input, Enter
+  places / Esc cancels), character **and colour** picker, and pan (one undo
+  step per stroke); cut/copy/paste the selection with `Ctrl+X`/`C`/`V`,
+  `Delete` clears the selected cells, `Esc` deselects
 - **Launch ratio picker**: the New Project dialog opens at launch with
   platform preset cards - TikTok/Reels, Instagram portrait & story, web
   banner 720x300, ad leaderboard 728x90, YouTube thumbnail, X post - each
@@ -304,7 +307,9 @@ cannot resolve.
 | `Ctrl+P` | Right dock: Palette |
 | `Ctrl+E` | Right dock: Effects |
 | `Space` | Toggle the terminal preview |
-| `B` / `E` / `F` / `I` / `H` | Brush / Eraser / Fill / Pick / Pan |
+| `S` / `B` / `E` / `F` / `I` / `H` | Select / Brush / Eraser / Fill / Pick / Pan |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selection (undoable) |
+| `Delete` / `Esc` | Clear the selected cells / drop the selection |
 
 ## Project layout
 
@@ -350,7 +355,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 1013 tests / 56 files, ~10 s
+npm test                          # 1059 tests / 58 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables
