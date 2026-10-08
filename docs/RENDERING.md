@@ -57,7 +57,10 @@ cell-effect runtime both key off that identity.
    bloom, glitch, scanlines, curvature … applied at source resolution *before*
    downsampling (see `docs/PERFORMANCE.md` for why that matters).
 4. **Map** — `renderImage.ts` samples luminance through a tone-mapping strategy
-   and picks a character from the active character set.
+   (feature-aware strategies additionally receive per-cell contrast / edge /
+   texture planes measured from the sampled raster) and picks a character
+   from the active character set, optionally re-ordered by each glyph's
+   calibrated ink (`output.inkOrder: 'measured'`).
 5. **Colour** — truecolor / ANSI-256 / ANSI-16 quantisation, palette binding.
 6. **Dither** — one of 52 algorithms (`core/dither.ts`) when dithering is on.
 

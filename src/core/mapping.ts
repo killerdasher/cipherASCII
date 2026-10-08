@@ -15,6 +15,7 @@
  */
 
 import { Registry } from './registry';
+import type { CellFeatures } from './analysis/cellFeatures';
 import type { MappingId, MappingSettings } from './types';
 import { clamp } from './util';
 
@@ -24,6 +25,14 @@ export interface MappingContext {
   width: number;
   height: number;
   settings: MappingSettings;
+  /**
+   * Per-cell feature planes (Phase 2/4). Present when the caller extracted
+   * them - the renderer does so only for strategies with `usesFeatures`, and
+   * only for cell-aligned (`pack: 'average'`) renders, because the planes
+   * hold `cols * rows` samples while sub-cell modes decide per sample.
+   * Feature strategies must fall back to plain luminance when it is absent.
+   */
+  features?: CellFeatures | null;
 }
 
 export interface MappingStrategy {
@@ -32,6 +41,12 @@ export interface MappingStrategy {
   description: string;
   /** True when the strategy reads neighbourhood information. */
   usesNeighbourhood: boolean;
+  /**
+   * True when the strategy reads {@link MappingContext.features}. The
+   * renderer computes the feature planes exactly when this is set, so the
+   * default strategy pays nothing for the capability.
+   */
+  usesFeatures: boolean;
   /** Returns the ink plane (0..1). Never mutates the input. */
   map(ctx: MappingContext): Float32Array;
 }
@@ -119,6 +134,7 @@ const luminanceStrategy: MappingStrategy = {
   description:
     'Perceptual brightness mapped directly to glyph density; the weights come from the selected luminance standard.',
   usesNeighbourhood: false,
+  usesFeatures: false,
   map: (ctx) => inkFromLuma(ctx.luma),
 };
 
@@ -127,6 +143,7 @@ const brightnessStrategy: MappingStrategy = {
   label: 'Brightness',
   description: 'Naive mean of intensity; flatter and brighter-looking than luminance.',
   usesNeighbourhood: false,
+  usesFeatures: false,
   map: (ctx) => {
     // Recomputing from luma is an approximation of RGB mean; acceptable because
     // the pipeline has already collapsed colour for mono output. Documented as
@@ -140,6 +157,7 @@ const contrastStrategy: MappingStrategy = {
   label: 'Contrast',
   description: 'Luminance with an S-curve so mid-tones separate into more glyph levels.',
   usesNeighbourhood: false,
+  usesFeatures: false,
   map: (ctx) => inkFromLuma(ctx.luma, clamp(ctx.settings.strength, -0.99, 0.99) * 0.8),
 };
 
@@ -149,6 +167,7 @@ const localContrastStrategy: MappingStrategy = {
   description:
     'Divides detail by the local average so both shadows and highlights keep texture (tone-mapped local contrast).',
   usesNeighbourhood: true,
+  usesFeatures: false,
   map: (ctx) => {
     const { luma, width, height, settings } = ctx;
     const radius = clamp(Math.round(settings.radius), 1, 64);
@@ -169,12 +188,23 @@ const localContrastStrategy: MappingStrategy = {
 const edgeStrategy: MappingStrategy = {
   id: 'edge',
   label: 'Edge aware',
-  description: 'Sobel edge magnitude combined with luminance so contours stay crisp.',
+  description: 'Edge magnitude combined with luminance so contours stay crisp.',
   usesNeighbourhood: true,
+  usesFeatures: true,
   map: (ctx) => {
-    const { luma, width, height, settings } = ctx;
+    const { luma, width, height, settings, features } = ctx;
     const ink = inkFromLuma(luma);
     const strength = clamp(settings.strength, 0, 2);
+    // Cell-aligned features: mean gradient measured on the supersampled
+    // raster, so borders of the plane count too (the Sobel pass below has to
+    // leave its one-pixel frame untouched).
+    if (features && features.cols === width && features.rows === height) {
+      const featureInk = new Float32Array(ink.length);
+      for (let i = 0; i < ink.length; i++) {
+        featureInk[i] = clamp(ink[i] + features.edge[i] * strength * 0.5, 0, 1);
+      }
+      return featureInk;
+    }
     const out = new Float32Array(ink.length);
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -207,6 +237,7 @@ const gradientStrategy: MappingStrategy = {
   label: 'Gradient',
   description: 'Emphasises shading transitions: ink follows the rate of brightness change.',
   usesNeighbourhood: true,
+  usesFeatures: false,
   map: (ctx) => {
     const { luma, width, height, settings } = ctx;
     const base = inkFromLuma(luma);
@@ -234,6 +265,7 @@ const thresholdStrategy: MappingStrategy = {
   label: 'Threshold',
   description: 'Hard black/white cut at the configured level; ideal for logos and line art.',
   usesNeighbourhood: false,
+  usesFeatures: false,
   map: (ctx) => {
     const cut = clamp(ctx.settings.threshold, 0, 1);
     const out = new Float32Array(ctx.luma.length);
@@ -248,6 +280,7 @@ const adaptiveStrategy: MappingStrategy = {
   description:
     'Heuristic per-region normalisation: each pixel is judged against its local mean and spread, so mixed lighting stays readable.',
   usesNeighbourhood: true,
+  usesFeatures: false,
   map: (ctx) => {
     const { luma, width, height, settings } = ctx;
     const radius = clamp(Math.round(settings.radius), 1, 64);
@@ -267,11 +300,42 @@ const adaptiveStrategy: MappingStrategy = {
   },
 };
 
+const detailStrategy: MappingStrategy = {
+  id: 'detail',
+  label: 'Detail aware',
+  description:
+    'Cell-level unsharp mask: each cell is separated from its neighbourhood by the amount of structure actually measured in it (contrast + texture), so detailed regions gain local snap while flat regions pass through untouched.',
+  usesNeighbourhood: true,
+  usesFeatures: true,
+  map: (ctx) => {
+    const { luma, width, height, settings, features } = ctx;
+    const base = inkFromLuma(luma);
+    if (!features || features.cols !== width || features.rows !== height) return base;
+    const radius = clamp(Math.round(settings.radius), 1, 64);
+    const strength = clamp(settings.strength, 0, 2);
+    const localMean = boxBlur(features.luminance, width, height, radius);
+    const out = new Float32Array(base.length);
+    for (let i = 0; i < base.length; i++) {
+      // Gate: how much structure this cell holds. Contrast (local stddev)
+      // and texture (blur residual) are the two measured planes that survive
+      // every supersample setting; 0.25 keeps a baseline amount of local
+      // contrast for smooth transitions.
+      const gate = 0.25 + 0.5 * (features.contrast[i] + features.texture[i]);
+      // Signed local detail: cell tone minus its neighbourhood mean (both
+      // 0..1 luminance). Brighter than neighbours -> subtract ink.
+      const signed = features.luminance[i] - localMean[i];
+      out[i] = clamp(base[i] - strength * signed * gate, 0, 1);
+    }
+    return out;
+  },
+};
+
 const customStrategy: MappingStrategy = {
   id: 'custom',
   label: 'Custom curve',
   description: 'User-defined transfer curve applied to plain luminance.',
   usesNeighbourhood: false,
+  usesFeatures: false,
   map: (ctx) => applyCurve(inkFromLuma(ctx.luma), ctx.settings.curve),
 };
 
@@ -291,11 +355,22 @@ mappingRegistry.registerAll([
   gradientStrategy,
   thresholdStrategy,
   adaptiveStrategy,
+  detailStrategy,
   customStrategy,
 ]);
 
 export function listMappingStrategies(): MappingStrategy[] {
   return mappingRegistry.list();
+}
+
+/**
+ * Registry lookup for a strategy id.
+ *
+ * @param id - strategy id (unknown ids yield `undefined`, not a throw)
+ * @returns the registered strategy, or `undefined` when nothing matches
+ */
+export function getMappingStrategy(id: MappingId | string): MappingStrategy | undefined {
+  return mappingRegistry.get(id);
 }
 
 export function runMapping(ctx: MappingContext): Float32Array {

@@ -110,7 +110,10 @@ Rows are computed as `rows = round(srcH × cols / srcW / ratio)`.
 `MappingStrategy` = pure function `(plane, w, h, opts) → value plane`.
 Registry pattern; adding a strategy never touches UI code beyond a registry
 lookup. Built-ins: `luminance`, `brightness`, `contrast`, `localContrast`,
-`edge`, `gradient`, `threshold`, `adaptive`, `custom`.
+`edge`, `gradient`, `threshold`, `adaptive`, `detail`, `custom`. Strategies
+with `usesFeatures: true` receive the per-cell `CellFeatures` planes
+(contrast / edge / texture measured inside each cell) and the renderer
+extracts them exactly for those strategies.
 
 `CharacterSet` presets + custom sequences (Character Set Lab) with
 dark→light ordering, offset and density curve.

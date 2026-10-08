@@ -188,6 +188,7 @@ export type MappingId =
   | 'gradient'
   | 'threshold'
   | 'adaptive'
+  | 'detail'
   | 'custom';
 
 export interface MappingSettings {
@@ -212,6 +213,15 @@ export interface MappingOutputSettings {
   /** Density curve exponent; >1 keeps more highlights, <1 lifts shadows. */
   density: number;
   invert: boolean;
+  /**
+   * How the charset is ordered before glyph selection.
+   *
+   * `positional` trusts the typed order (what every preset ships with).
+   * `measured` re-orders the characters by their calibration-table ink at
+   * render time, so an injected ramp still maps dark → light correctly.
+   * Projects written before this field existed render as `positional`.
+   */
+  inkOrder: 'positional' | 'measured';
 }
 
 /**
@@ -266,7 +276,7 @@ export const DEFAULT_IMAGE_RENDER: ImageRenderSettings = {
     curve: [],
   },
   dither: { algorithm: 'none', strength: 1, serpentine: false, matrixSize: 8 },
-  output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false },
+  output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false, inkOrder: 'positional' },
   colorMode: 'sample',
   effectSpace: 'source',
 };
@@ -387,7 +397,7 @@ export interface CreativeRenderSettings {
 
 export const DEFAULT_CREATIVE_RENDER: CreativeRenderSettings = {
   mapping: { strategy: 'luminance', radius: 3, threshold: 0.5, strength: 1, curve: [] },
-  output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false },
+  output: { charset: '@%#*+=-:. ', offset: 0, density: 1, invert: false, inkOrder: 'positional' },
   dither: 'none',
 };
 

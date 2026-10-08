@@ -5,12 +5,14 @@ import { ALL_CHARSET_PRESETS, CHARSET_CATEGORIES, validateCustomCharset } from '
 import { calibrationCoverage } from '../core/glyph/calibration';
 import { sortRampByInk } from '../core/glyph/sort';
 import { listDitherAlgorithms } from '../core/dither';
+import { listMappingStrategies } from '../core/mapping';
 import type {
   ImageRenderSettings,
   ColorMode,
   RenderMode,
   DitherId,
   LuminanceStandard,
+  MappingId,
   MappingOutputSettings,
   ResizeFilter,
 } from '../core/types';
@@ -36,6 +38,11 @@ function AsciiControlsPanelInner() {
     setImageSettings({ preprocess: { ...imageSettings.preprocess, ...patch } });
 
   const dithers = useMemo(() => listDitherAlgorithms(), []);
+  const strategies = useMemo(() => listMappingStrategies(), []);
+  const activeStrategy = useMemo(
+    () => strategies.find((s) => s.id === imageSettings.mapping.strategy),
+    [strategies, imageSettings.mapping.strategy],
+  );
   const ramp = output.charset;
 
   const stats = useMemo(() => calibrationCoverage(ALL_CHARSET_PRESETS), []);
@@ -132,6 +139,46 @@ function AsciiControlsPanelInner() {
             <option value="srgb-linear">sRGB linear (perceptual)</option>
           </select>
         </div>
+      </div>
+
+      {/* ---------------- Mapping ---------------- */}
+      <div className="prop-section">
+        <h4>Mapping</h4>
+        <div className="prop-row">
+          <label>Strategy</label>
+          <select
+            value={imageSettings.mapping.strategy}
+            onChange={(e) =>
+              setImageSettings({
+                mapping: { ...imageSettings.mapping, strategy: e.target.value as MappingId },
+              })
+            }
+            title="How luminance becomes ink before dithering and glyph selection"
+          >
+            {strategies.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+        {activeStrategy && <p className="glyph-hint">{activeStrategy.description}</p>}
+        <Slider
+          label="Strength"
+          value={imageSettings.mapping.strength}
+          min={0}
+          max={2}
+          step={0.05}
+          display={imageSettings.mapping.strength.toFixed(2)}
+          onChange={(v) => setImageSettings({ mapping: { ...imageSettings.mapping, strength: v } })}
+        />
+        <Slider
+          label="Radius"
+          value={imageSettings.mapping.radius}
+          min={1}
+          max={16}
+          step={1}
+          display={String(imageSettings.mapping.radius)}
+          onChange={(v) => setImageSettings({ mapping: { ...imageSettings.mapping, radius: v } })}
+        />
       </div>
 
       {/* ---------------- Live glyph preview ---------------- */}
@@ -259,6 +306,16 @@ function AsciiControlsPanelInner() {
             Sort ramp dark → light
           </button>
           <p className="glyph-hint">{sortHint}</p>
+        </div>
+        <div className="prop-row">
+          <label title="Re-orders the ramp by each glyph's calibrated ink at render time instead of trusting the typed order">
+            Order by measured ink
+          </label>
+          <input
+            type="checkbox"
+            checked={output.inkOrder === 'measured'}
+            onChange={(e) => patchOutput({ inkOrder: e.target.checked ? 'measured' : 'positional' })}
+          />
         </div>
       </div>
 

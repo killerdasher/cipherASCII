@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   CHARSET_PRESETS,
   boxBlur,
@@ -7,6 +9,7 @@ import {
   validateCharset,
   type MappingContext,
 } from '../../src/core/mapping';
+import { computeCellFeatures } from '../../src/core/analysis/cellFeatures';
 import { createRaster } from '../../src/core/image/raster';
 import { renderImageToGrid } from '../../src/core/renderImage';
 import { DEFAULT_IMAGE_RENDER, type MappingSettings } from '../../src/core/types';
@@ -158,6 +161,62 @@ describe('edge strategy', () => {
   });
 });
 
+describe('detail strategy', () => {
+  it('passes flat regions through as plain luminance', () => {
+    const luma = constant(WIDTH, HEIGHT, 0.5);
+    const features = computeCellFeatures(luma, WIDTH, HEIGHT, WIDTH, HEIGHT);
+    const out = runMapping({ ...ctx(luma, WIDTH, HEIGHT, { strategy: 'detail' }), features });
+    const plain = runMapping(ctx(luma, WIDTH, HEIGHT));
+    expect(Array.from(out)).toEqual(Array.from(plain));
+  });
+
+  it('falls back to plain luminance when the caller extracted no features', () => {
+    const luma = noise(WIDTH, HEIGHT, 11);
+    const out = runMapping(ctx(luma, WIDTH, HEIGHT, { strategy: 'detail' }));
+    const plain = runMapping(ctx(luma, WIDTH, HEIGHT));
+    expect(Array.from(out)).toEqual(Array.from(plain));
+  });
+
+  it('separates structured cells from their neighbourhood', () => {
+    const luma = noise(WIDTH, HEIGHT, 11);
+    const features = computeCellFeatures(luma, WIDTH, HEIGHT, WIDTH, HEIGHT);
+    const out = runMapping({ ...ctx(luma, WIDTH, HEIGHT, { strategy: 'detail' }), features });
+    const plain = runMapping(ctx(luma, WIDTH, HEIGHT));
+    expect(inRange(out)).toBe(true);
+    expect(Array.from(out)).not.toEqual(Array.from(plain));
+  });
+
+  it('applies nothing at strength 0', () => {
+    const luma = noise(WIDTH, HEIGHT, 5);
+    const features = computeCellFeatures(luma, WIDTH, HEIGHT, WIDTH, HEIGHT);
+    const out = runMapping({
+      ...ctx(luma, WIDTH, HEIGHT, { strategy: 'detail', strength: 0 }),
+      features,
+    });
+    const plain = runMapping(ctx(luma, WIDTH, HEIGHT));
+    expect(Array.from(out)).toEqual(Array.from(plain));
+  });
+});
+
+describe('edge strategy with cell features', () => {
+  it('uses the measured per-cell gradient when features are aligned', () => {
+    const src = step(WIDTH, 16, 8, 1, 0.5);
+    const features = computeCellFeatures(src, WIDTH, 16, WIDTH, 16);
+    const measured = runMapping({ ...ctx(src, WIDTH, 16, { strategy: 'edge' }), features });
+    const sobel = runMapping(ctx(src, WIDTH, 16, { strategy: 'edge' }));
+    const plain = runMapping(ctx(src, WIDTH, 16));
+    expect(inRange(measured)).toBe(true);
+    expect(Array.from(measured)).not.toEqual(Array.from(sobel));
+    // Both edge paths answer the step; the feature path just measures it on
+    // the cell grid instead of convolving a Sobel kernel.
+    expect(measured[8 * WIDTH + 8]).toBeGreaterThan(plain[8 * WIDTH + 8] + 0.1);
+    expect(sobel[8 * WIDTH + 8]).toBeGreaterThan(plain[8 * WIDTH + 8] + 0.4);
+    // Flat corners are untouched by both.
+    expect(measured[0]).toBeCloseTo(plain[0], 6);
+    expect(sobel[0]).toBeCloseTo(plain[0], 6);
+  });
+});
+
 describe('threshold strategy', () => {
   it('splits a ramp plane cleanly at 0.5', () => {
     const width = 11;
@@ -285,8 +344,17 @@ describe('listMappingStrategies', () => {
       'edge',
       'threshold',
       'adaptive',
+      'detail',
+      'custom',
     ]) {
       expect(ids).toContain(id);
     }
+  });
+});
+
+describe('documentation stays measurable', () => {
+  it('README quotes the strategy count this registry produces', () => {
+    const readme = readFileSync(join(__dirname, '../../README.md'), 'utf8');
+    expect(readme).toContain(`${listMappingStrategies().length} tone-mapping strategies`);
   });
 });

@@ -14,7 +14,9 @@
  */
 
 import { applyDither } from './dither';
-import { inkToIndex, runMapping } from './mapping';
+import { getMappingStrategy, inkToIndex, runMapping } from './mapping';
+import { computeCellFeatures } from './analysis/cellFeatures';
+import { sortRampByInk } from './glyph/sort';
 import { applyPreprocess, type ShouldCancel } from './image/preprocess';
 import { resizeRaster } from './image/resize';
 import { lumaPlane } from './image/raster';
@@ -319,11 +321,22 @@ export function rasterToGrid(
   // --- mapping ------------------------------------------------------------
   const decisionW = geo.pack === 'average' ? cols : geo.sampleW;
   const decisionH = geo.pack === 'average' ? rows : geo.sampleH;
+  // Per-cell features (contrast / edge / texture measured inside each cell of
+  // the sampled raster) are extracted only for strategies that consume them,
+  // and only where cells and the decision grid agree: sub-cell modes decide
+  // per sample, so there is no cell plane to align them with. The default
+  // strategy therefore pays nothing for the capability.
+  const features =
+    geo.pack === 'average' && getMappingStrategy(settings.mapping.strategy)?.usesFeatures
+      ? computeCellFeatures(rawLuma, geo.sampleW, geo.sampleH, cols, rows)
+      : null;
+  check(cancel);
   let ink = runMapping({
     luma: cellLuma,
     width: decisionW,
     height: decisionH,
     settings: settings.mapping,
+    features,
   });
   if (settings.output.invert) {
     const inv = new Float32Array(ink.length);
@@ -465,10 +478,15 @@ function assembleGrid(
   bg: Int32Array | null,
 ): AsciiGrid {
   const chars: string[] = new Array(cols * rows);
-  const charset = [
-    ...(settings.output.charset && settings.output.charset.length > 0
+  const rawCharset =
+    settings.output.charset && settings.output.charset.length > 0
       ? settings.output.charset
-      : '@%#*+=-:. '),
+      : '@%#*+=-:. ';
+  // `measured` re-orders by calibration-table ink (dark -> light); `positional`
+  // trusts the typed order. Projects written before `inkOrder` existed have
+  // `undefined` here and render exactly as before.
+  const charset = [
+    ...(settings.output.inkOrder === 'measured' ? sortRampByInk(rawCharset).sorted : rawCharset),
   ];
   const offset = settings.output.offset;
   const density = settings.output.density > 0 ? settings.output.density : 1;

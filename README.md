@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-980%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-994%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -118,7 +118,8 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
 - **Adaptive performance**: Auto/Balanced/Low quality modes driven by a
   frame-time controller (hysteresis + cooldown), plus a debug overlay with
   FPS, frame time, tier and render stats (`docs/PERFORMANCE.md`)
-- **9 tone-mapping strategies** (luminance, brightness, contrast, local contrast, edge, ...)
+- **10 tone-mapping strategies** (luminance, brightness, contrast, local contrast, edge,
+  detail-aware content mapping driven by per-cell contrast/edge/texture, ...)
 - **10 export formats**: TXT, ASC, ANSI, JSON, HTML, SVG, AAP, PNG, **MP4**, **GIF**
 - **10 themes**: Medieval, Dither Boy, Terminal Green, Terminal Amber, Light,
   High Contrast, plus the four cipher themes - **Gothic Medieval**, **Cyber Y2K**,
@@ -127,8 +128,9 @@ npm run electron:pack  # unpacked executable only (release/win-unpacked/)
   swap recolours every new component at once
 - **Calibrated glyph metrics** (`src/core/glyph/`): `npm run calibrate`
   measures every preset character (ink, bounding box, density, edge ratio,
-  symmetry) into a committed table; the ramp sorts by that measured ink and
-  says how many characters fell back to the coverage table
+  symmetry) into a committed table; the ramp sorts by that measured ink
+  (button or render-time **Order by measured ink**) and says how many
+  characters fell back to the coverage table
 - **Canvas drawing tools**: brush, eraser, flood fill, **text** (type straight
   onto the canvas with a floating input, Enter places / Esc cancels),
   character **and colour** picker, and pan (one undo step per stroke)
@@ -319,7 +321,7 @@ src/core/            Pure rendering core - never imports UI code
   charsets/          82 character sets, 3,011 unique characters
   glyph/             Glyph features, index, committed calibration table
   dither.ts          52 dither algorithms
-  mapping.ts         9 tone-mapping strategies + charset presets
+  mapping.ts         10 tone-mapping strategies + charset presets
   effects/           20-effect raster pipeline
   text/              Bitmap fonts, FIGlet, banner styles
   palette/           Palette model, extraction, import/export
@@ -348,7 +350,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 980 tests / 55 files, ~10 s
+npm test                          # 994 tests / 56 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables
