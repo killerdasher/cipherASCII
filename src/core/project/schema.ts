@@ -26,6 +26,7 @@ import {
   ok,
 } from '../types';
 import { createEffectsPipeline } from '../effects/pipeline';
+import { PRESET_PALETTES } from '../palette/palette';
 import { defaultTimeline } from '../timeline/timeline';
 import { isPrintableChar } from '../util';
 
@@ -342,6 +343,12 @@ export function validateDocument(doc: unknown): Result<Document> {
     if (doc.source !== undefined && doc.source !== null && !isPlainObject(doc.source)) {
       return err('invalid-project', 'source must be an object or null');
     }
+    if (doc.palettes !== undefined && !Array.isArray(doc.palettes)) {
+      return err('invalid-project', 'palettes must be an array');
+    }
+    if (doc.customThemes !== undefined && !Array.isArray(doc.customThemes)) {
+      return err('invalid-project', 'customThemes must be an array');
+    }
     return ok({ ...doc, layers } as unknown as Document);
   } catch (e) {
     return err('internal', 'Failed to validate project', detailOf(e));
@@ -392,9 +399,11 @@ export function createDocument(overrides: Partial<Document> = {}): Document {
     effectsPipeline: createEffectsPipeline(),
     cellEffects: [],
     paletteId: null,
+    palettes: structuredClone(PRESET_PALETTES),
     timeline: defaultTimeline(),
     renderPresets: [],
     themeId: 'medieval',
+    customThemes: [],
     generators: [],
     fxSeed: DEFAULT_FX_SEED,
   };

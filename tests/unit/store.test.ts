@@ -6,7 +6,8 @@ import { terminateWorker } from '../../src/worker/client';
 import { History } from '../../src/core/history/history';
 import { linesToGrid } from '../../src/core/grid';
 import { defaultGeneratorGraph, setNodeParam } from '../../src/core/generators/edit';
-import type { CreativeLayer, Document } from '../../src/core/types';
+import type { CreativeLayer, Document, Palette, RenderPreset } from '../../src/core/types';
+import { THEME_PRESETS } from '../../src/core/theme/theme';
 
 describe('view state', () => {
   beforeEach(() => {
@@ -625,5 +626,102 @@ describe('creative refresh through the worker pool', () => {
       (useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer)
         .cacheKey,
     ).toBe('fresh');
+  });
+});
+
+describe('document-owned palettes, presets and themes (schema 4)', () => {
+  const samplePalette: Palette = {
+    id: 'mine',
+    name: 'Mine',
+    colors: [{ rgb: 0x112233 }],
+    createdAt: 't',
+    updatedAt: 't',
+  };
+
+  beforeEach(() => {
+    useStore.getState().newDocument();
+  });
+
+  it('mirrors palette edits into the document', () => {
+    const st = () => useStore.getState();
+    st().setActivePalette('some-id');
+    expect(st().document.paletteId).toBe('some-id');
+    expect(st().isDirty).toBe(true);
+
+    st().addPalette(samplePalette);
+    expect(st().document.palettes.some((p) => p.id === 'mine')).toBe(true);
+    expect(st().activePaletteId).toBe('mine');
+    expect(st().document.paletteId).toBe('mine');
+
+    st().updatePalette('mine', { name: 'Renamed' });
+    expect(st().document.palettes.find((p) => p.id === 'mine')?.name).toBe('Renamed');
+
+    st().removePalette('mine');
+    expect(st().document.palettes.some((p) => p.id === 'mine')).toBe(false);
+    expect(st().document.paletteId).toBeNull();
+    expect(st().activePaletteId).toBeNull();
+  });
+
+  it('mirrors render presets into the document', () => {
+    const st = () => useStore.getState();
+    const doc = st().document;
+    const preset: Omit<RenderPreset, 'id' | 'createdAt' | 'updatedAt'> = {
+      name: 'My preset',
+      description: '',
+      imageSettings: doc.imageSettings,
+      textSettings: doc.textSettings,
+      exportSettings: doc.exportSettings,
+      effectsPipeline: doc.effectsPipeline,
+      tags: [],
+    };
+    st().saveRenderPreset(preset);
+    expect(st().document.renderPresets).toHaveLength(1);
+    expect(st().document.renderPresets[0].name).toBe('My preset');
+    expect(st().renderPresets[0].id).toBe(st().document.renderPresets[0].id);
+    expect(st().isDirty).toBe(true);
+
+    const id = st().renderPresets[0].id;
+    st().deleteRenderPreset(id);
+    expect(st().document.renderPresets).toHaveLength(0);
+  });
+
+  it('mirrors theme selection and custom themes into the document', () => {
+    const st = () => useStore.getState();
+    const other = THEME_PRESETS.find((t) => t.id !== st().document.themeId) ?? THEME_PRESETS[0];
+    st().setTheme(other.id);
+    expect(st().document.themeId).toBe(other.id);
+    expect(st().isDirty).toBe(true);
+
+    st().createCustomTheme({ name: 'My Theme' });
+    expect(st().document.themeId).toMatch(/^custom_/);
+    expect(st().document.customThemes).toHaveLength(1);
+    expect(st().document.customThemes[0].name).toBe('My Theme');
+    expect(st().availableThemes.some((t) => t.id === st().document.themeId)).toBe(true);
+  });
+
+  it('hydrates slices and applies the theme when a document loads', () => {
+    const st = () => useStore.getState();
+    const customTheme = {
+      ...THEME_PRESETS[0],
+      id: 'custom_hydrated',
+      name: 'Hydrated',
+      colors: { ...THEME_PRESETS[0].colors, bg: '#123456' },
+    };
+    const doc: Document = {
+      ...st().document,
+      paletteId: 'loaded-palette',
+      palettes: [{ ...samplePalette, id: 'loaded-palette', name: 'Loaded' }],
+      themeId: 'custom_hydrated',
+      customThemes: [customTheme],
+      renderPresets: [],
+    };
+    st().setDocument(doc);
+    expect(st().activePaletteId).toBe('loaded-palette');
+    expect(st().palettes[0].id).toBe('loaded-palette');
+    expect(st().theme.id).toBe('custom_hydrated');
+    expect(st().availableThemes.some((t) => t.id === 'custom_hydrated')).toBe(true);
+    // applyTheme wrote the CSS variables for the loaded theme.
+    const css = document.getElementById('theme-variables');
+    expect(css?.textContent).toContain('#123456');
   });
 });

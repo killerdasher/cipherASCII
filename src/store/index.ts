@@ -322,6 +322,34 @@ const defaultTheme = getDefaultTheme();
 const defaultEffectsPipeline = createEffectsPipeline();
 
 /**
+ * Working slices a loaded document owns (schema 4): palettes, render presets
+ * and themes live in the document; the store keeps them as readable slices
+ * and writes every mutation back (see `slicesFromDocument` call sites).
+ */
+function slicesFromDocument(doc: Document): {
+  palettes: Palette[];
+  activePaletteId: string | null;
+  renderPresets: RenderPreset[];
+  availableThemes: Theme[];
+  theme: Theme;
+} {
+  const palettes =
+    Array.isArray(doc.palettes) && doc.palettes.length > 0 ? doc.palettes : PRESET_PALETTES;
+  const availableThemes = [
+    ...THEME_PRESETS,
+    ...(Array.isArray(doc.customThemes) ? doc.customThemes : []),
+  ];
+  const theme = availableThemes.find((t) => t.id === doc.themeId) ?? defaultTheme;
+  return {
+    palettes,
+    activePaletteId: doc.paletteId ?? PRESET_PALETTES[0]?.id ?? null,
+    renderPresets: Array.isArray(doc.renderPresets) ? doc.renderPresets : [],
+    availableThemes,
+    theme,
+  };
+}
+
+/**
  * Merge the document's timeline into the transport view.
  *
  * Authoring fields always come from the document (that is the persisted
@@ -401,6 +429,24 @@ export const useStore = create<AppState>()(
     // evaluations can never land out of order or against a dead layer.
     let creativeEpoch = 0;
 
+    // Authoring state mirrors (schema 4): palettes, render presets and themes
+    // are document-owned, so every mutation writes the document copy too —
+    // but like cell effects, they are not individual history steps.
+    const commitPalettes = (palettes: Palette[], activePaletteId: string | null): void => {
+      const doc = get().document;
+      set({
+        palettes,
+        activePaletteId,
+        document: { ...doc, palettes, paletteId: activePaletteId },
+        isDirty: true,
+      });
+    };
+
+    const commitRenderPresets = (next: RenderPreset[]): void => {
+      const doc = get().document;
+      set({ renderPresets: next, document: { ...doc, renderPresets: next }, isDirty: true });
+    };
+
     // Does moving between two documents change what the worker should draw?
     const renderSettingsChanged = (a: Document, b: Document): boolean =>
       !deepEqual(a.imageSettings, b.imageSettings) || !deepEqual(a.textSettings, b.textSettings);
@@ -475,6 +521,7 @@ export const useStore = create<AppState>()(
       // Document actions
       newDocument: (overrides) => {
         const doc = createDocument(overrides);
+        const slices = slicesFromDocument(doc);
         set({
           document: doc,
           history: new History(doc, { limit: 200, coalesceWindowMs: 800 }),
@@ -486,11 +533,14 @@ export const useStore = create<AppState>()(
           cellEffects: doc.cellEffects ?? [],
           fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
           timeline: adoptTimeline(doc.timeline),
+          ...slices,
         });
+        applyTheme(slices.theme);
         get().triggerRender();
       },
 
       setDocument: (doc, handle) => {
+        const slices = slicesFromDocument(doc);
         set({
           document: doc,
           history: new History(doc, { limit: 200, coalesceWindowMs: 800 }),
@@ -503,7 +553,9 @@ export const useStore = create<AppState>()(
           fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
           // A load adopts the document's timeline; the transport resets.
           timeline: adoptTimeline(doc.timeline),
+          ...slices,
         });
+        applyTheme(slices.theme);
         get().triggerRender();
       },
 
@@ -1027,26 +1079,26 @@ export const useStore = create<AppState>()(
 
       // Palettes
       addPalette: (palette) => {
-        set((state) => ({ palettes: [...state.palettes, palette] }));
+        commitPalettes([...get().palettes, palette], palette.id);
       },
 
       removePalette: (paletteId) => {
-        set((state) => ({
-          palettes: state.palettes.filter((p) => p.id !== paletteId),
-          activePaletteId: state.activePaletteId === paletteId ? null : state.activePaletteId,
-        }));
+        const { palettes, activePaletteId } = get();
+        const next = palettes.filter((p) => p.id !== paletteId);
+        commitPalettes(next, activePaletteId === paletteId ? null : activePaletteId);
       },
 
       setActivePalette: (paletteId) => {
-        set({ activePaletteId: paletteId });
+        commitPalettes(get().palettes, paletteId);
       },
 
       updatePalette: (paletteId, updates) => {
-        set((state) => ({
-          palettes: state.palettes.map((p) =>
+        commitPalettes(
+          get().palettes.map((p) =>
             p.id === paletteId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
           ),
-        }));
+          get().activePaletteId,
+        );
       },
 
       // Presets
@@ -1057,11 +1109,11 @@ export const useStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        set((state) => ({ renderPresets: [...state.renderPresets, newPreset] }));
+        commitRenderPresets([...get().renderPresets, newPreset]);
       },
 
       deleteRenderPreset: (presetId) => {
-        set((state) => ({ renderPresets: state.renderPresets.filter((p) => p.id !== presetId) }));
+        commitRenderPresets(get().renderPresets.filter((p) => p.id !== presetId));
       },
 
       applyRenderPreset: (presetId) => {
@@ -1081,27 +1133,40 @@ export const useStore = create<AppState>()(
         }
 
         history.push(next, { key: 'preset' });
-        set({ document: next, isDirty: true, effectsPipeline: preset.effectsPipeline ?? get().effectsPipeline });
+        set({
+          document: next,
+          isDirty: true,
+          effectsPipeline: preset.effectsPipeline ?? get().effectsPipeline,
+          // The preset's palette selection owns the active one too.
+          ...(preset.paletteId ? { activePaletteId: preset.paletteId } : {}),
+        });
         get().triggerRender();
       },
 
       // Theme
       setTheme: (themeId) => {
-        const { availableThemes } = get();
+        const { availableThemes, document } = get();
         const theme = availableThemes.find((t) => t.id === themeId);
         if (!theme) return;
         applyTheme(theme);
-        set({ theme });
+        set({ theme, document: { ...document, themeId }, isDirty: true });
       },
 
       createCustomTheme: (overrides) => {
-        const { theme } = get();
+        const { theme, availableThemes, document } = get();
         const custom = createCustomTheme(theme, overrides);
-        set((state) => ({
-          availableThemes: [...state.availableThemes, custom],
-          theme: custom,
-        }));
+        const nextThemes = [...availableThemes, custom];
         applyTheme(custom);
+        set({
+          availableThemes: nextThemes,
+          theme: custom,
+          document: {
+            ...document,
+            themeId: custom.id,
+            customThemes: [...(document.customThemes ?? []).filter((t) => t.id !== custom.id), custom],
+          },
+          isDirty: true,
+        });
       },
 
       // UI actions

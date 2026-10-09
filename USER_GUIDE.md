@@ -60,9 +60,9 @@ desktop shortcut named **cipherASCII**.
 | --- | --- |
 | **Export** | Pick a format (TXT, ASC, ANSI, JSON, HTML, SVG, AAP, PNG, MP4, GIF), preview the output, download it. MP4/GIF render the whole timeline with a progress bar |
 | **Effects** | Ordered effect stack: add, remove, reorder, tune each parameter. 19 effects are available |
-| **Palette** | Palettes list, create/import, edit colours, sort by luminance/hue/saturation, and **Auto Palette - 5 Colors** |
-| **Presets** | Save the current render settings as a named preset and re-apply it later |
-| **Theme** | 10 built-in themes (Medieval, Dither Boy, Terminal Green, Terminal Amber, Light, High Contrast, Gothic Medieval, Cyber Y2K, Cozy Cafe French, Zelda / RPG) plus a "Create Custom Theme" dialog |
+| **Palette** | Palettes list, create/import, edit colours, sort by luminance/hue/saturation, and **Auto Palette - 5 Colors**; palettes save with the project |
+| **Presets** | Save the current render settings as a named preset and re-apply it later; presets save with the project |
+| **Theme** | 10 built-in themes (Medieval, Dither Boy, Terminal Green, Terminal Amber, Light, High Contrast, Gothic Medieval, Cyber Y2K, Cozy Cafe French, Zelda / RPG) plus a "Create Custom Theme" dialog; custom themes save with the project |
 | **Gen** | The generator node graph: pick a graph, add/remove nodes, wire inputs (drop-downs only offer nodes earlier in the dependency order, so cycles are impossible), tune parameters and choose which node becomes the field |
 | **Settings** | **Canvas presets** (TikTok / Reels, square, wide banner, HD - snapped to the 8 x 16 cell grid), image settings (columns, mode, fit, dither, invert), text settings (font, style, scale), canvas size and the **subtexture mask** |
 
@@ -207,8 +207,15 @@ header swaps in a fresh timeline — one undo brings the old one back.
 ### Save and reopen
 
 - **Ctrl+S** opens Save Project when there are unsaved changes; save as
-  `.aap` (project format) or plain `.json`.
-- **Open** in the toolbar reloads a saved project.
+  `.aap` (project format) or plain `.json`. The desktop app opens a native
+  file dialog; the browser downloads the file.
+- **Open** in the toolbar reloads a saved project (native dialog in the
+  desktop app, file picker in the browser).
+- **Autosave / recovery:** while the project has unsaved changes it is
+  snapshotted into local storage every couple of seconds. After a crash or
+  a closed tab the snapshot is restored at startup and the project is
+  marked dirty — save it to settle the recovery point. Projects larger than
+  2 MB are not snapshotted (the previous recovery point is kept).
 
 ## 4. Keyboard shortcuts
 

@@ -231,7 +231,7 @@ Layers of the target system, in dependency order (mirrors Phases 1–12):
 ```
 ┌─ UI (React panels, editor canvas, suggestions, generator graph editor)
 ├─ Store (Zustand — view state + derived slices; Document is sole source of truth)
-├─ Project (versioned schema v3: CreativeLayer graph, AnalysisField, Mask, GlyphIndex
+├─ Project (versioned schema v4: CreativeLayer graph, AnalysisField, Mask, GlyphIndex
 │           refs, GeneratorGraph, timeline, palettes, presets — everything persisted,
 │           autosave + native dialogs)
 ├─ Engine (pure src/core, DOM-free, deterministic, seeded)
@@ -277,7 +277,7 @@ Design rules carried into every phase:
 | 7 | Effects + animation integration (non-destructive, exportable) | 1, 5 | done |
 | 8 | Worker pool | 2, 4, 6 | done |
 | 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 | done |
-| 10 | Persistence completeness + autosave + native dialogs | 1 | pending |
+| 10 | Persistence completeness + autosave + native dialogs | 1 | done |
 | 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | pending |
 | 12 | Docs, README, benchmarks, screenshots refresh | all | pending |
 

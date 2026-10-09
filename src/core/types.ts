@@ -592,12 +592,16 @@ export interface Document {
   cellEffects: CellEffectEntry[];
   /** Active palette ID. */
   paletteId: string | null;
+  /** All palettes (presets plus user-created/edited) — schema 4. */
+  palettes: Palette[];
   /** Animation timeline. */
   timeline: Timeline | null;
   /** Saved render presets. */
   renderPresets: RenderPreset[];
   /** Active theme ID. */
   themeId: string;
+  /** User-created themes beyond {@link Theme} presets — schema 4. */
+  customThemes: Theme[];
   /** Procedural generator graphs; creative layers reference these by id. */
   generators: GeneratorGraph[];
   /** Seed for procedural generators and cell-effect RNG. */
@@ -607,7 +611,7 @@ export interface Document {
 /** Seed used when a document predates {@link Document.fxSeed}. */
 export const DEFAULT_FX_SEED = 0x5eed;
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Results / errors

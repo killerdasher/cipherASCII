@@ -253,9 +253,9 @@ describe('serializeProject / deserializeProject', () => {
   });
 });
 
-describe('schema version 3', () => {
-  it('bumps CURRENT_SCHEMA_VERSION to 3', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(3);
+describe('schema version 4', () => {
+  it('bumps CURRENT_SCHEMA_VERSION to 4', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(4);
   });
 
   it('round-trips generators and fxSeed', () => {

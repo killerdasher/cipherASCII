@@ -4,6 +4,7 @@ import { RenderSuggestions } from './components/RenderSuggestions';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore, useStoreShallow, selectDocument, selectActiveLayer, selectLayers, selectCanvasSettings, selectIsDirty, selectRenderGeneration, selectPendingRender, selectActivePanel, selectActiveRightPanel, selectShowGrid, selectShowGuides, selectCrtGlow, selectGpuPreview, selectZoomLevel, selectTheme, selectTool } from './store';
+import { initAutosave, restoreAutosave } from './store/autosave';
 import type { LeftPanelId, RightPanelId } from './store';
 import type { ToolState } from './core/types';
 import { Toolbar } from './components/Toolbar';
@@ -374,6 +375,15 @@ const {
     };
     window.addEventListener('keydown', openPalette);
     return () => window.removeEventListener('keydown', openPalette);
+  }, []);
+
+  // Autosave: while dirty, snapshot the document on a debounce; at boot,
+  // recover a snapshot left behind by a crash or closed tab (see
+  // src/store/autosave.ts for the full policy).
+  useEffect(() => {
+    const dispose = initAutosave();
+    restoreAutosave();
+    return dispose;
   }, []);
 
   // Native File/Edit/View menu (see electron/main.ts) -> the same actions the

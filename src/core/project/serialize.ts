@@ -8,6 +8,8 @@
 import type { CellEffectEntry } from '../fx/pipeline';
 import { GLYPH_CLASSES, MASK_KINDS, type GlyphClass } from '../fx/mask';
 import { canonicalGeneratorGraph, type GeneratorGraph } from '../generators/graph';
+import { PRESET_PALETTES } from '../palette/palette';
+import { THEME_PRESETS } from '../theme/theme';
 import {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_FX_SEED,
@@ -19,8 +21,11 @@ import {
   type EasingType,
   type Guide,
   type Keyframe,
+  type Palette,
+  type PaletteColor,
   type ProjectMetadata,
   type Result,
+  type Theme,
   type Timeline,
   err,
   ok,
@@ -187,12 +192,13 @@ export function deserializeProject(json: string): Result<Document> {
 /**
  * Upgrade a document to `CURRENT_SCHEMA_VERSION`.
  *
- * Accepts schema versions 1 through 3: version 1 documents gain the `guides`
- * and `editor` blocks introduced in version 2, and every document predating
- * version 3 gains `generators` and `fxSeed`. Every missing or malformed
- * default is repaired, and unknown keys are dropped by rebuilding the
- * document from its known fields. Documents newer than
- * `CURRENT_SCHEMA_VERSION` return `err('unsupported-version', ...)`;
+ * Accepts schema versions 1 through 4: version 1 documents gain the `guides`
+ * and `editor` blocks introduced in version 2, every document predating
+ * version 3 gains `generators` and `fxSeed`, and every document predating
+ * version 4 gains `palettes` (the shipped presets) and `customThemes` (empty).
+ * Every missing or malformed default is repaired, and unknown keys are
+ * dropped by rebuilding the document from its known fields. Documents newer
+ * than `CURRENT_SCHEMA_VERSION` return `err('unsupported-version', ...)`;
  * unusable versions return `err('invalid-project', ...)`. Never throws.
  *
  * @param doc - validated document to migrate
@@ -271,6 +277,103 @@ function canonicalGenerators(value: unknown): GeneratorGraph[] {
   for (const raw of value) {
     const graph = canonicalGeneratorGraph(raw);
     if (graph) out.push(graph);
+  }
+  return out;
+}
+
+/**
+ * Repair the palette list, field by field.
+ *
+ * A missing/empty list (every project predating schema 4) falls back to the
+ * shipped presets so the palette panel is never empty; entries with a bad id,
+ * name or colour array drop. Colour entries need a finite `rgb`; optional
+ * `name`/`locked` copy through when usable.
+ */
+function canonicalPalettes(value: unknown): Palette[] {
+  if (!Array.isArray(value) || value.length === 0) return PRESET_PALETTES;
+  const out: Palette[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    if (typeof raw.id !== 'string' || raw.id.length === 0 || seen.has(raw.id)) continue;
+    if (typeof raw.name !== 'string' || raw.name.length === 0) continue;
+    if (!Array.isArray(raw.colors)) continue;
+    const colors: PaletteColor[] = [];
+    for (const entry of raw.colors) {
+      if (!isPlainObject(entry)) continue;
+      if (typeof entry.rgb !== 'number' || !Number.isFinite(entry.rgb)) continue;
+      const color: PaletteColor = { rgb: Math.trunc(entry.rgb) };
+      if (typeof entry.name === 'string') color.name = entry.name;
+      if (typeof entry.locked === 'boolean') color.locked = entry.locked;
+      colors.push(color);
+    }
+    seen.add(raw.id);
+    const palette: Palette = {
+      id: raw.id,
+      name: raw.name,
+      colors,
+      createdAt:
+        typeof raw.createdAt === 'string'
+          ? raw.createdAt
+          : new Date(0).toISOString(),
+      updatedAt:
+        typeof raw.updatedAt === 'string'
+          ? raw.updatedAt
+          : new Date(0).toISOString(),
+    };
+    if (typeof raw.description === 'string') palette.description = raw.description;
+    if (raw.source === 'auto' || raw.source === 'manual' || raw.source === 'imported') {
+      palette.source = raw.source;
+    }
+    out.push(palette);
+  }
+  return out.length > 0 ? out : PRESET_PALETTES;
+}
+
+/** Copy only the string-valued entries of a theme sub-record over a fallback. */
+function stringRecord<T extends object>(value: unknown, fallback: T): T {
+  const source: Record<string, unknown> = isPlainObject(value) ? value : {};
+  const out: Record<string, unknown> = { ...(fallback as unknown as Record<string, unknown>) };
+  for (const [key, entry] of Object.entries(source)) {
+    if (typeof entry === 'string') out[key] = entry;
+  }
+  return out as T;
+}
+
+/**
+ * Repair user-authored themes.
+ *
+ * Each entry is rebuilt on top of the default preset so a hand-edited or
+ * truncated theme can never feed `undefined` into `applyTheme`'s CSS
+ * variables; only string values survive inside `colors`/`fonts`/etc, ids and
+ * names must be non-empty, duplicates drop, and malformed entries are
+ * discarded entirely.
+ */
+function canonicalCustomThemes(value: unknown): Theme[] {
+  if (!Array.isArray(value)) return [];
+  const base = THEME_PRESETS[0];
+  const out: Theme[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    if (typeof raw.id !== 'string' || raw.id.length === 0 || seen.has(raw.id)) continue;
+    if (typeof raw.name !== 'string' || raw.name.length === 0) continue;
+    seen.add(raw.id);
+    const theme: Theme = {
+      ...base,
+      ...raw,
+      id: raw.id,
+      name: raw.name,
+      description: typeof raw.description === 'string' ? raw.description : base.description,
+      colors: stringRecord(raw.colors, base.colors),
+      fonts: stringRecord(raw.fonts, base.fonts),
+      spacing: stringRecord(raw.spacing, base.spacing),
+      borderRadius: stringRecord(raw.borderRadius, base.borderRadius),
+      shadows: stringRecord(raw.shadows, base.shadows),
+      transitions: stringRecord(raw.transitions, base.transitions),
+      isDark: typeof raw.isDark === 'boolean' ? raw.isDark : base.isDark,
+    };
+    out.push(theme);
   }
   return out;
 }
@@ -396,9 +499,11 @@ export function migrateDocument(doc: Document): Result<Document> {
       effectsPipeline: doc.effectsPipeline ?? fallback.effectsPipeline,
       cellEffects: canonicalCellEffects(doc.cellEffects),
       paletteId: doc.paletteId ?? null,
+      palettes: canonicalPalettes(doc.palettes),
       timeline: canonicalTimeline(doc.timeline),
       renderPresets: Array.isArray(doc.renderPresets) ? doc.renderPresets : [],
       themeId: typeof doc.themeId === 'string' ? doc.themeId : 'medieval',
+      customThemes: canonicalCustomThemes(doc.customThemes),
       // Schema 3: generator graphs and the procedural/cell-effect seed. Both
       // are repaired rather than rejected - documents from schema 1 and 2 do
       // not carry them, and a hand-edited seed must never poison the RNG.
