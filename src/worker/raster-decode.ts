@@ -17,7 +17,11 @@ function parseDataUrl(dataUrl: string): { mime: string; data: Uint8Array } | nul
   return { mime, data: bytes };
 }
 
-async function decodeImageBitmap(blob: Blob): Promise<ImageBitmap> {
+/** Decode a data URL to an `ImageBitmap`; callers must `close()` it. */
+export async function dataUrlToBitmap(dataUrl: string): Promise<ImageBitmap> {
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) throw new Error('Invalid data URL');
+  const blob = new Blob([new Uint8Array(parsed.data.buffer as ArrayBuffer)], { type: parsed.mime });
   return createImageBitmap(blob);
 }
 
@@ -36,9 +40,10 @@ async function bitmapToRaster(bitmap: ImageBitmap): Promise<Raster> {
 }
 
 export async function dataUrlToRaster(dataUrl: string): Promise<Raster> {
-  const parsed = parseDataUrl(dataUrl);
-  if (!parsed) throw new Error('Invalid data URL');
-  const blob = new Blob([new Uint8Array(parsed.data.buffer as ArrayBuffer)], { type: parsed.mime });
-  const bitmap = await decodeImageBitmap(blob);
-  return bitmapToRaster(bitmap);
+  const bitmap = await dataUrlToBitmap(dataUrl);
+  try {
+    return await bitmapToRaster(bitmap);
+  } finally {
+    bitmap.close();
+  }
 }

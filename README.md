@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-1113%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-1126%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -193,6 +193,7 @@ Implemented and covered by the test suite:
 | Export: TXT / ASC / ANSI / JSON / HTML / SVG / AAP / **PNG** / **MP4** / **GIF** | working |
 | Video export: every timeline frame rasterised and encoded with **ffmpeg.wasm** (H.264 MP4, single-pass palette GIF), progress bar in the Export panel | working |
 | Worker rendering with generation IDs (stale results are dropped) + stage progress in the status bar | working |
+| Worker pool: up to 4 slots; image analysis + generative-layer graphs run off-thread (single-flight, epoch-guarded replies) | working |
 | Stale-render settlement (`StaleRenderError`) + 60 ms render debounce | working |
 | Cell-effect engine: 45 effects, masks, pipeline, seeded determinism | working |
 | Live cell-effect playback in the editor (self-stopping rAF loop) | working |
@@ -340,7 +341,7 @@ docs/images/       Hero GIF, poster frame, animated pipeline graph
 docs/screenshots/  One rendered preview per theme (npm run screenshots)
 scripts/           Bench, simulations, signature demo, gallery/hero/icon generators
 scripts/lib/       Shared drawing helpers for the generators (excluded from vitest)
-src/worker/        Web Worker render host (generation IDs, cancellation)
+src/worker/        Pooled Web Worker host (render/decode/analysis/creative, generation IDs)
 src/services/      Renderer-side ffmpeg.wasm video export
 src/components/    React panels (left/right docks, canvas, modals)
 src/store/         Zustand store (project, view, ui, settings)
@@ -356,7 +357,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 1113 tests / 59 files, ~10 s
+npm test                          # 1126 tests / 60 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables

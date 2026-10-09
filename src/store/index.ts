@@ -49,7 +49,7 @@ import {
   canvasPresetToCells,
   type CanvasPresetId,
 } from '../core/canvasPresets';
-import { bumpGeneration } from '../worker/client';
+import { bumpGeneration, poolSupported, renderCreative, StaleRenderError } from '../worker/client';
 import { THEME_PRESETS, getDefaultTheme, applyTheme, createCustomTheme } from '../core/theme/theme';
 import { PRESET_PALETTES } from '../core/palette/palette';
 import { createEffectsPipeline, DEFAULT_EFFECT_PARAMS, addEffect, removeEffect, reorderEffects, updateEffectParams, setEffectEnabled, setEffectIntensity } from '../core/effects/pipeline';
@@ -189,7 +189,7 @@ export interface AppState {
   /** Remove a graph unless a creative layer still points at it. */
   removeGenerator: (graphId: string) => boolean;
   /** Re-evaluate every stale creative layer; returns how many were refreshed. */
-  refreshCreativeLayers: () => number;
+  refreshCreativeLayers: () => Promise<number>;
 
   setImageSettings: (patch: Partial<ImageRenderSettings>) => void;
   /**
@@ -395,6 +395,11 @@ export const useStore = create<AppState>()(
       const doc = get().document;
       set({ cellEffects: next, document: { ...doc, cellEffects: next }, isDirty: true });
     };
+
+    // Staleness token for creative-layer refreshes: every dispatch bumps it,
+    // and a reply only derives when its epoch is still current, so pooled
+    // evaluations can never land out of order or against a dead layer.
+    let creativeEpoch = 0;
 
     // Does moving between two documents change what the worker should draw?
     const renderSettingsChanged = (a: Document, b: Document): boolean =>
@@ -694,29 +699,68 @@ export const useStore = create<AppState>()(
         return true;
       },
 
-      refreshCreativeLayers: () => {
+      refreshCreativeLayers: async () => {
         const doc = get().document;
         const canvas = { width: doc.canvas.width, height: doc.canvas.height };
-        let count = 0;
+        const stale: CreativeLayer[] = [];
         for (const layer of doc.layers) {
           if (layer.kind !== 'creative') continue;
           if (creativeGridFresh(layer, doc.generators, canvas, doc.fxSeed)) continue;
-          const result = renderCreativeLayer(doc.generators, layer, canvas, doc.fxSeed);
-          if (result.ok) {
-            // Derived cache: `layer/derive` is in RENDER_OUTPUT_COMMANDS, so
-            // it never lands in history and never schedules a worker render.
-            get().applyCommand({
-              type: 'layer/derive',
-              layerId: layer.id,
-              grid: result.value.grid,
-              cacheKey: result.value.cacheKey,
-            });
-            count++;
-          } else {
-            get().setStatusMessage(`Generative layer "${layer.name}": ${result.error.message}`);
-          }
+          stale.push(layer);
         }
-        return count;
+        if (stale.length === 0) return 0;
+
+        const epoch = ++creativeEpoch;
+        const isCurrent = () => epoch === creativeEpoch;
+
+        const runOne = async (layer: CreativeLayer): Promise<boolean> => {
+          const graph = doc.generators.find((g) => g.id === layer.graphId);
+          if (!graph) {
+            if (isCurrent()) {
+              get().setStatusMessage(
+                `Generative layer "${layer.name}": generator graph "${layer.graphId}" not found`,
+              );
+            }
+            return false;
+          }
+
+          let result: ReturnType<typeof renderCreativeLayer>;
+          if (poolSupported()) {
+            try {
+              const value = await renderCreative(graph, layer, canvas, doc.fxSeed);
+              result = { ok: true, value };
+            } catch (e) {
+              if (e instanceof StaleRenderError) return false;
+              // Infrastructural worker failure: fall back to the main thread
+              // so the layer still fills.
+              result = renderCreativeLayer(doc.generators, layer, canvas, doc.fxSeed);
+            }
+          } else {
+            result = renderCreativeLayer(doc.generators, layer, canvas, doc.fxSeed);
+          }
+
+          if (!result.ok) {
+            if (isCurrent()) {
+              get().setStatusMessage(`Generative layer "${layer.name}": ${result.error.message}`);
+            }
+            return false;
+          }
+          if (!isCurrent()) return false;
+          const current = get().document.layers.find((l) => l.id === layer.id);
+          if (!current || current.kind !== 'creative') return false;
+          // Derived cache: `layer/derive` is in RENDER_OUTPUT_COMMANDS, so
+          // it never lands in history and never schedules a worker render.
+          get().applyCommand({
+            type: 'layer/derive',
+            layerId: layer.id,
+            grid: result.value.grid,
+            cacheKey: result.value.cacheKey,
+          });
+          return true;
+        };
+
+        const results = await Promise.all(stale.map(runOne));
+        return results.filter(Boolean).length;
       },
 
       setImageSettings: (patch) => {

@@ -10,23 +10,40 @@ import {
   type ImageRenderRequest,
   type TextRenderRequest,
   type ProceduralRenderRequest,
+  type CreativeLayer,
+  type Size,
 } from '../core/types';
+import type { GeneratorGraph } from '../core/generators/graph';
 import {
   renderImageToGrid,
   prepareSampledRaster,
   rasterToGrid,
   CancelledRender,
 } from '../core/renderImage';
+import { renderCreativeLayer } from '../core/layer/creative';
 import { renderTextToGrid } from '../core/text/render';
 import { applyEffectsToRaster } from '../core/effects/pipeline';
+import { analyzeLumaChunked } from '../core/analyze';
+import { analysisSampleSize, ANALYSIS_DEFAULT_COLUMNS } from '../core/analysis/sampleSize';
+import { lumaPlane } from '../core/image/raster';
 import { type Raster } from '../core/types';
-import { dataUrlToRaster } from './raster-decode';
+import { dataUrlToBitmap, dataUrlToRaster } from './raster-decode';
 
 type WorkerRequest =
   | (ImageRenderRequest & { generationId?: number })
   | (TextRenderRequest & { generationId?: number })
   | (ProceduralRenderRequest & { generationId?: number })
-  | { kind: 'decode'; jobId: number; dataUrl: string; generationId: number };
+  | { kind: 'decode'; jobId: number; dataUrl: string; generationId: number }
+  | { kind: 'analysis'; jobId: number; dataUrl: string; columns?: number; generationId: number }
+  | {
+      kind: 'creative';
+      jobId: number;
+      graph: GeneratorGraph;
+      layer: CreativeLayer;
+      canvas: Size;
+      seed: number;
+      generationId: number;
+    };
 
 let currentGeneration = 0;
 
@@ -46,6 +63,31 @@ function shouldCancel(gen: number): boolean {
   return gen !== currentGeneration;
 }
 
+/**
+ * Downscale a data URL to the analysis sample box and return its Rec.709
+ * luminance plane. Mirrors `sampleImageLuminance` on the main thread — same
+ * `analysisSampleSize` geometry, same `drawImage` downscale — so both paths
+ * measure the same plane.
+ */
+async function sampleAnalysisLuma(
+  dataUrl: string,
+  columns: number,
+): Promise<{ luma: Float32Array; width: number; height: number }> {
+  const bitmap = await dataUrlToBitmap(dataUrl);
+  try {
+    const { width, height } = analysisSampleSize(bitmap.width, bitmap.height, columns);
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('OffscreenCanvas 2D unavailable for image analysis.');
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    const image = ctx.getImageData(0, 0, width, height);
+    const raster: Raster = { width, height, data: image.data };
+    return { luma: lumaPlane(raster, 'rec709'), width, height };
+  } finally {
+    bitmap.close();
+  }
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   const jobId = msg.jobId;
@@ -61,6 +103,58 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         jobId,
         'decode-failed',
         e instanceof Error ? e.message : 'Unknown decode error',
+        msg.generationId,
+      );
+    }
+    return;
+  }
+
+  if (msg.kind === 'analysis') {
+    // Like `decode`, an analysis runs beside whatever render is current: it
+    // must not touch `currentGeneration`, and its replies echo the request's
+    // own generation so the client can correlate them.
+    try {
+      const { luma, width, height } = await sampleAnalysisLuma(
+        msg.dataUrl,
+        msg.columns ?? ANALYSIS_DEFAULT_COLUMNS,
+      );
+      const result = await analyzeLumaChunked(luma, width, height, {}, () =>
+        new Promise<void>((resolve) => setTimeout(resolve, 0)),
+      );
+      self.postMessage({ kind: 'analysis', jobId, generationId: msg.generationId, result });
+    } catch (e) {
+      postError(
+        jobId,
+        'analysis-failed',
+        e instanceof Error ? e.message : 'Unknown analysis error',
+        msg.generationId,
+      );
+    }
+    return;
+  }
+
+  if (msg.kind === 'creative') {
+    // Like `decode`/`analysis`, a creative evaluation runs beside the render
+    // loop and must not touch `currentGeneration`. Staleness is enforced by
+    // the store's refresh epoch when the reply lands.
+    try {
+      const result = renderCreativeLayer([msg.graph], msg.layer, msg.canvas, msg.seed);
+      if (!result.ok) {
+        postError(jobId, result.error.code, result.error.message, msg.generationId);
+      } else {
+        self.postMessage({
+          kind: 'creative-result',
+          jobId,
+          generationId: msg.generationId,
+          grid: result.value.grid,
+          cacheKey: result.value.cacheKey,
+        });
+      }
+    } catch (e) {
+      postError(
+        jobId,
+        'creative-failed',
+        e instanceof Error ? e.message : 'Unknown creative error',
         msg.generationId,
       );
     }

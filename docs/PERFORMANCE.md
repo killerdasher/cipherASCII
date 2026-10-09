@@ -128,6 +128,7 @@ constraint at any realistic scene size.
 | Change | Effect | Evidence |
 | --- | --- | --- |
 | Worker generation guard (`StaleRenderError`) | Superseded renders settle instead of leaking `Map` entries and hanging `await`s | `tests/unit/worker.test.ts` (4 cases) |
+| Worker pool (lazy spawn, up to 4 slots) for render/analysis/creative | Image analysis and creative-layer graph evaluation (measured 18.5 ms at 480×200) run off-thread; analysis single-flights and survives generation bumps; creative replies are epoch-guarded so out-of-order results never land | `worker.test.ts` pool describe (6), `store.test.ts` pool (2), `imageImport.test.ts` (2), `imageAnalysis.test.ts` (3) |
 | Result + `pendingRender` generation checks in `App.tsx` | A stale render can no longer clobber a newer grid or clear the pending flag | same |
 | 60 ms render debounce | Slider bursts coalesce into one worker render | code + status path; manual verification |
 | Clone-once brush stroke | 24–57× faster per 64-cell stroke | `npm run bench:engines` |

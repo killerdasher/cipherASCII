@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // The store applies the active theme to the document at creation time.
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useStore, selectCrtGlow } from '../../src/store';
+import { terminateWorker } from '../../src/worker/client';
 import { History } from '../../src/core/history/history';
 import { linesToGrid } from '../../src/core/grid';
 import { defaultGeneratorGraph, setNodeParam } from '../../src/core/generators/edit';
@@ -366,9 +367,9 @@ describe('generative layers (store)', () => {
     expect(back.generators).toHaveLength(0);
   });
 
-  it('refreshCreativeLayers fills the derived cache and then goes quiet', () => {
+  it('refreshCreativeLayers fills the derived cache and then goes quiet', async () => {
     const layerId = useStore.getState().addCreativeLayer()!;
-    expect(useStore.getState().refreshCreativeLayers()).toBe(1);
+    expect(await useStore.getState().refreshCreativeLayers()).toBe(1);
 
     const doc = useStore.getState().document;
     const layer = doc.layers.find((l) => l.id === layerId) as CreativeLayer;
@@ -377,21 +378,21 @@ describe('generative layers (store)', () => {
     expect(layer.grid!.height).toBe(doc.canvas.height);
     expect(layer.cacheKey).not.toBe('');
     // Fresh now: the next pass has nothing to evaluate.
-    expect(useStore.getState().refreshCreativeLayers()).toBe(0);
+    expect(await useStore.getState().refreshCreativeLayers()).toBe(0);
   });
 
-  it('the refresh stays out of history: undo still removes layer and graph together', () => {
+  it('the refresh stays out of history: undo still removes layer and graph together', async () => {
     const layerId = useStore.getState().addCreativeLayer()!;
-    useStore.getState().refreshCreativeLayers();
+    await useStore.getState().refreshCreativeLayers();
     useStore.getState().undo();
     const doc = useStore.getState().document;
     expect(doc.layers.some((l) => l.id === layerId)).toBe(false);
     expect(doc.generators).toHaveLength(0);
   });
 
-  it('re-evaluates after a graph edit and reports a broken graph binding', () => {
+  it('re-evaluates after a graph edit and reports a broken graph binding', async () => {
     const layerId = useStore.getState().addCreativeLayer()!;
-    useStore.getState().refreshCreativeLayers();
+    await useStore.getState().refreshCreativeLayers();
     const firstKey = (useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer)
       .cacheKey;
 
@@ -399,7 +400,7 @@ describe('generative layers (store)', () => {
     const edited = setNodeParam(graph, 'cut', 'threshold', 0.9);
     if (!edited.ok) throw new Error(edited.error.message);
     expect(useStore.getState().upsertGenerator(edited.value)).toBe(true);
-    expect(useStore.getState().refreshCreativeLayers()).toBe(1);
+    expect(await useStore.getState().refreshCreativeLayers()).toBe(1);
     const after = useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer;
     expect(after.cacheKey).not.toBe(firstKey);
     expect(after.grid).not.toBeNull();
@@ -407,7 +408,7 @@ describe('generative layers (store)', () => {
     // A dangling graph id reports instead of throwing, and changes nothing.
     useStore.getState().updateCreativeLayer(layerId, { graphId: 'missing' });
     const broken = useStore.getState().document;
-    expect(useStore.getState().refreshCreativeLayers()).toBe(0);
+    expect(await useStore.getState().refreshCreativeLayers()).toBe(0);
     expect(useStore.getState().document).toBe(broken);
     expect(useStore.getState().statusMessage).toContain('missing');
   });
@@ -537,5 +538,92 @@ describe('timeline wired to the document', () => {
     expect(st.timeline?.currentFrame).toBe(9);
     expect(st.timeline?.playing).toBe(false);
     expect(st.isDirty).toBe(false);
+  });
+});
+
+describe('creative refresh through the worker pool', () => {
+  let instances: any[] = [];
+
+  class PoolWorker {
+    onmessage: ((e: { data: any }) => void) | null = null;
+    onerror: ((e: any) => void) | null = null;
+    posted: any[] = [];
+    constructor() {
+      instances.push(this);
+    }
+    postMessage(msg: any) {
+      this.posted.push(msg);
+    }
+    terminate() {
+      /* noop */
+    }
+  }
+
+  /** Reply to a slot's most recent creative post with the given cache key. */
+  function replyCreative(slot: any, cacheKey: string): void {
+    const posted = slot.posted[slot.posted.length - 1];
+    slot.onmessage?.({
+      data: {
+        kind: 'creative-result',
+        jobId: posted.jobId,
+        generationId: posted.generationId,
+        grid: { width: 4, height: 2, chars: ['@'], fg: null, bg: null },
+        cacheKey,
+      },
+    });
+  }
+
+  beforeEach(() => {
+    instances = [];
+    vi.stubGlobal('Worker', PoolWorker);
+    vi.stubGlobal('navigator', { hardwareConcurrency: 4 });
+    terminateWorker();
+    useStore.getState().newDocument();
+  });
+
+  afterEach(() => {
+    terminateWorker();
+    vi.unstubAllGlobals();
+  });
+
+  it('dispatches a creative job and derives the grid when the reply lands', async () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+    const promise = useStore.getState().refreshCreativeLayers();
+    expect(instances).toHaveLength(1);
+    expect(instances[0].posted[0].kind).toBe('creative');
+
+    replyCreative(instances[0], 'key-1');
+    expect(await promise).toBe(1);
+
+    const layer = useStore.getState().document.layers.find(
+      (l) => l.id === layerId,
+    ) as CreativeLayer;
+    expect(layer.grid).not.toBeNull();
+    expect(layer.cacheKey).toBe('key-1');
+  });
+
+  it('drops an out-of-order reply when a newer refresh already dispatched', async () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+
+    const first = useStore.getState().refreshCreativeLayers();
+    const second = useStore.getState().refreshCreativeLayers();
+    // Slot 0 is busy, so the second dispatch spawned slot 1.
+    expect(instances).toHaveLength(2);
+
+    // The newer reply lands first and derives.
+    replyCreative(instances[1], 'fresh');
+    await expect(second).resolves.toBe(1);
+    expect(
+      (useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer)
+        .cacheKey,
+    ).toBe('fresh');
+
+    // The older reply lands afterwards and must be ignored (epoch mismatch).
+    replyCreative(instances[0], 'stale');
+    await expect(first).resolves.toBe(0);
+    expect(
+      (useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer)
+        .cacheKey,
+    ).toBe('fresh');
   });
 });

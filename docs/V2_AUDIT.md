@@ -275,7 +275,7 @@ Design rules carried into every phase:
 | 5 | Selection, regions, blend modes, unified compositor | 1 | done |
 | 6 | Generative layer / node graph | 1, 2 | done |
 | 7 | Effects + animation integration (non-destructive, exportable) | 1, 5 | done |
-| 8 | Worker pool | 2, 4, 6 | pending |
+| 8 | Worker pool | 2, 4, 6 | done |
 | 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 | pending |
 | 10 | Persistence completeness + autosave + native dialogs | 1 | pending |
 | 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | pending |

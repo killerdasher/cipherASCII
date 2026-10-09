@@ -231,7 +231,7 @@ const {
   // non-undoable `layer/derive` (RENDER_OUTPUT_COMMANDS), which lands a new
   // document and brings us back here with a matching key - no loop.
   useEffect(() => {
-    useStore.getState().refreshCreativeLayers();
+    void useStore.getState().refreshCreativeLayers();
   }, [document]);
 
   // Timeline playback: a rAF loop advancing the playhead at the timeline's

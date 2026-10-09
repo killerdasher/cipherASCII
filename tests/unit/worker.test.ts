@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { bumpGeneration, getGeneration, cancelAll, terminateWorker, renderImage, StaleRenderError } from '../../src/worker/client';
-import type { EffectsPipeline, ImageRenderSettings } from '../../src/core/types';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { bumpGeneration, getGeneration, cancelAll, terminateWorker, renderImage, requestAnalysis, StaleRenderError } from '../../src/worker/client';
+import { DEFAULT_IMAGE_RENDER, type EffectsPipeline, type ImageRenderSettings } from '../../src/core/types';
 
 describe('worker client', () => {
   it('bumpGeneration increments', () => {
@@ -239,5 +239,123 @@ describe('stale render settlement', () => {
     const assertion = expect(promise).rejects.toThrow(/Cancelled by generation bump/);
     cancelAll();
     await assertion;
+  });
+});
+
+describe('worker pool', () => {
+  let instances: any[] = [];
+
+  class PoolWorker {
+    onmessage: ((e: { data: any }) => void) | null = null;
+    onerror: ((e: any) => void) | null = null;
+    posted: any[] = [];
+    terminated = false;
+    constructor() {
+      instances.push(this);
+    }
+    postMessage(msg: any) {
+      this.posted.push(msg);
+    }
+    terminate() {
+      this.terminated = true;
+    }
+  }
+
+  /** Reply to the most recent post on `slot` with a constructed message. */
+  function reply(slot: any, kind: string, extra: Record<string, unknown> = {}): void {
+    const posted = slot.posted[slot.posted.length - 1];
+    slot.onmessage?.({
+      data: { kind, jobId: posted.jobId, generationId: posted.generationId, ...extra },
+    });
+  }
+
+  beforeEach(() => {
+    instances = [];
+    vi.stubGlobal('Worker', PoolWorker);
+    vi.stubGlobal('navigator', { hardwareConcurrency: 4 });
+    terminateWorker();
+  });
+
+  afterEach(() => {
+    terminateWorker();
+    vi.unstubAllGlobals();
+  });
+
+  it('reuses an idle slot and only spawns a second worker when the first is busy', async () => {
+    const first = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    expect(instances).toHaveLength(1);
+
+    const analysis = requestAnalysis('data:image/png;base64,AAAA');
+    expect(instances).toHaveLength(2);
+
+    reply(instances[0], 'result', { result: { grid: {}, stats: {} } });
+    reply(instances[1], 'analysis', { result: { recommendations: [], traits: null } });
+    await expect(first).resolves.toBeTruthy();
+    await expect(analysis).resolves.toMatchObject({ recommendations: [] });
+
+    // Both slots idle again: the next job reuses slot 0 instead of spawning.
+    const again = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    expect(instances).toHaveLength(2);
+    reply(instances[0], 'result', { result: { grid: {}, stats: {} } });
+    await again;
+  });
+
+  it('single-flights analysis: a newer run supersedes the previous one', async () => {
+    const older = requestAnalysis('data:image/png;base64,AAAA');
+    const olderAssertion = expect(older).rejects.toBeInstanceOf(StaleRenderError);
+
+    const newer = requestAnalysis('data:image/png;base64,BBBB');
+    await olderAssertion;
+    expect(instances).toHaveLength(1); // older settled, slot reused
+
+    reply(instances[0], 'analysis', { result: { recommendations: ['chip'], traits: null } });
+    await expect(newer).resolves.toMatchObject({ recommendations: ['chip'] });
+  });
+
+  it('analysis survives a render generation bump', async () => {
+    const analysis = requestAnalysis('data:image/png;base64,AAAA');
+    let settled = false;
+    void analysis.catch(() => {
+      settled = true;
+    });
+
+    bumpGeneration();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    reply(instances[0], 'analysis', { result: { recommendations: [], traits: null } });
+    await expect(analysis).resolves.toBeTruthy();
+  });
+
+  it('surfaces analysis-failed errors from the worker', async () => {
+    const analysis = requestAnalysis('data:image/png;base64,AAAA');
+    reply(instances[0], 'error', { code: 'analysis-failed', message: 'bad data' });
+    await expect(analysis).rejects.toThrow(/analysis-failed: bad data/);
+  });
+
+  it('terminateWorker retires slots and settles jobs that will never reply', async () => {
+    const render = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    terminateWorker();
+    expect(instances[0].terminated).toBe(true);
+    await expect(render).rejects.toThrow(/Worker terminated/);
+    expect(instances).toHaveLength(1);
+
+    // A fresh dispatch after termination spawns a clean slot.
+    const next = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    expect(instances).toHaveLength(2);
+    reply(instances[1], 'result', { result: { grid: {}, stats: {} } });
+    await next;
+  });
+
+  it('a crashed slot fails only its own jobs and is replaced on the next dispatch', async () => {
+    const render = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    instances[0].onerror?.({ message: 'boom' });
+    await expect(render).rejects.toThrow(/Worker error: boom/);
+
+    const next = renderImage('data:image/png;base64,AAAA', DEFAULT_IMAGE_RENDER);
+    expect(instances).toHaveLength(2);
+    expect(instances[0].terminated).toBe(true);
+    reply(instances[1], 'result', { result: { grid: {}, stats: {} } });
+    await next;
   });
 });

@@ -7,6 +7,8 @@
 import type { ImageLayer, ImageSource, Layer, Raster } from '../core/types';
 import { lumaPlane } from '../core/image/raster';
 import { analyzeLumaChunked, type RenderAnalysis } from '../core/analyze';
+import { analysisSampleSize, ANALYSIS_DEFAULT_COLUMNS } from '../core/analysis/sampleSize';
+import { poolSupported, requestAnalysis, StaleRenderError } from '../worker/client';
 
 const IMAGE_MIME_OK = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'];
 
@@ -73,16 +75,12 @@ export interface ImportTarget {
  */
 export async function sampleImageLuminance(
   dataUrl: string,
-  columns = 100,
+  columns = ANALYSIS_DEFAULT_COLUMNS,
 ): Promise<{ luma: Float32Array; width: number; height: number }> {
   const response = await fetch(dataUrl);
   const bitmap = await createImageBitmap(await response.blob());
   try {
-    const w = Math.max(8, Math.min(240, Math.min(columns, bitmap.width)));
-    const h = Math.max(
-      8,
-      Math.min(240, Math.round((w * bitmap.height * 0.5) / bitmap.width)),
-    );
+    const { width: w, height: h } = analysisSampleSize(bitmap.width, bitmap.height, columns);
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -99,13 +97,29 @@ export async function sampleImageLuminance(
 
 /**
  * Sample an image and run the chunked auto glyph/dither analysis.
- * Callers decide what to do with the result; throws only on decode failures
- * (the analysis itself is best-effort and never throws for odd content).
+ *
+ * Runs in the worker pool when one is available (analysis shares the main
+ * thread with rendering otherwise) and falls back to the main-thread path
+ * when the worker fails for infrastructural reasons; a superseded analysis
+ * propagates as {@link StaleRenderError} so a newer run is never raced by an
+ * older one. Callers decide what to do with the result; throws only on decode
+ * failures (the analysis itself is best-effort and never throws for odd
+ * content).
  */
 export async function runImageAnalysis(
   dataUrl: string,
   source: string,
 ): Promise<RenderAnalysis> {
+  if (poolSupported()) {
+    try {
+      const result = await requestAnalysis(dataUrl);
+      return { ...result, source };
+    } catch (e) {
+      if (e instanceof StaleRenderError) throw e;
+      // Worker infrastructural failure (no OffscreenCanvas, crashed slot):
+      // fall through to the main-thread path so suggestions still appear.
+    }
+  }
   const { luma, width, height } = await sampleImageLuminance(dataUrl);
   const result = await analyzeLumaChunked(
     luma,

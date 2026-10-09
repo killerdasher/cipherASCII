@@ -9,6 +9,7 @@ import {
 import { AnalysisCache } from '../../src/core/analysis/cache';
 import { textureKey } from '../../src/core/analysis/measures';
 import { fieldFromData, type AnalysisField } from '../../src/core/analysis/field';
+import { analysisSampleSize } from '../../src/core/analysis/sampleSize';
 import type { Raster } from '../../src/core/types';
 
 const W = 40;
@@ -273,5 +274,23 @@ describe('imageAnalysisCache', () => {
     expect(imageAnalysisCache.stats().size).toBeGreaterThan(before);
     imageAnalysisCache.clear();
     expect(imageAnalysisCache.stats().size).toBe(0);
+  });
+});
+
+describe('analysisSampleSize', () => {
+  it('follows the requested column count within the [8, 240] clamp', () => {
+    expect(analysisSampleSize(1000, 500, 100)).toEqual({ width: 100, height: 25 });
+    expect(analysisSampleSize(4000, 2000, 1000)).toEqual({ width: 240, height: 60 });
+    expect(analysisSampleSize(4000, 2000, 4)).toEqual({ width: 8, height: 8 });
+  });
+
+  it('never drops below 8x8 whatever the source', () => {
+    expect(analysisSampleSize(4, 4)).toEqual({ width: 8, height: 8 });
+    expect(analysisSampleSize(1, 10000, 400)).toEqual({ width: 8, height: 240 });
+  });
+
+  it('keeps the 2x cell aspect for typical photos', () => {
+    // 16:9 photo at 100 columns: 100 * 0.5 * 9/16 ≈ 28 rows
+    expect(analysisSampleSize(1920, 1080, 100)).toEqual({ width: 100, height: 28 });
   });
 });
