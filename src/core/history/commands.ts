@@ -15,6 +15,7 @@
 import type {
   AsciiGrid,
   CanvasSettings,
+  CreativeLayer,
   Document,
   EditorState,
   ExportSettings,
@@ -39,6 +40,7 @@ import {
   fromMutable,
   trimGrid,
 } from '../grid';
+import { validateGeneratorGraph, type GeneratorGraph } from '../generators/graph';
 import { sanitizeText } from '../util';
 
 export type GridTransform = 'clear' | 'trim' | 'flipH' | 'flipV' | 'rotate90';
@@ -67,6 +69,19 @@ export type Command =
       patch: Partial<Pick<Layer, 'name' | 'visible' | 'locked' | 'opacity' | 'blend' | 'x' | 'y'>>;
     }
   | { type: 'layer/move'; layerId: LayerId; toIndex: number }
+  // Derived creative-layer cache (grid + invalidation key). Applied exactly
+  // like `grid/replace`: not an undoable authoring step and not a reason to
+  // schedule a render — the renderer is what produces it.
+  | { type: 'layer/derive'; layerId: LayerId; grid: AsciiGrid; cacheKey: string }
+  // Authoring edits to a creative layer's non-structural settings.
+  | {
+      type: 'creative/update';
+      layerId: LayerId;
+      patch: Partial<Pick<CreativeLayer, 'graphId' | 'render'>>;
+    }
+  // Generator graphs live at document level: upsert by id, or remove.
+  | { type: 'generator/upsert'; graph: GeneratorGraph }
+  | { type: 'generator/remove'; graphId: string }
   | { type: 'document/metadata'; patch: Partial<ProjectMetadata> }
   | { type: 'document/canvas'; patch: Partial<CanvasSettings> }
   | { type: 'document/imageSettings'; patch: Partial<ImageRenderSettings> }
@@ -220,6 +235,36 @@ export function applyCommand(doc: Document, cmd: Command): Document {
       const [moved] = layers.splice(from, 1);
       layers.splice(to, 0, moved);
       return { ...doc, layers };
+    }
+    case 'layer/derive':
+      return withLayer(doc, cmd.layerId, (layer) => {
+        if (layer.kind !== 'creative') return layer;
+        if (layer.cacheKey === cmd.cacheKey && layer.grid && gridsEqual(layer.grid, cmd.grid)) {
+          return layer;
+        }
+        return { ...layer, grid: cloneGrid(cmd.grid), cacheKey: cmd.cacheKey };
+      });
+    case 'creative/update':
+      return withLayer(doc, cmd.layerId, (layer) => {
+        if (layer.kind !== 'creative') return layer;
+        const merged = { ...layer, ...cmd.patch } as CreativeLayer;
+        if (merged.graphId === layer.graphId && merged.render === layer.render) return layer;
+        return merged;
+      });
+    case 'generator/upsert': {
+      const canonical = validateGeneratorGraph(cmd.graph);
+      if (!canonical.ok) return doc;
+      const idx = doc.generators.findIndex((g) => g.id === canonical.value.id);
+      const generators =
+        idx >= 0
+          ? doc.generators.map((g, i) => (i === idx ? canonical.value : g))
+          : [...doc.generators, canonical.value];
+      return { ...doc, generators };
+    }
+    case 'generator/remove': {
+      const generators = doc.generators.filter((g) => g.id !== cmd.graphId);
+      if (generators.length === doc.generators.length) return doc;
+      return { ...doc, generators };
     }
     case 'document/metadata':
       return { ...doc, metadata: { ...doc.metadata, ...cmd.patch } };

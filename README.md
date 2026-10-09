@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-1059%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-1101%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -197,6 +197,7 @@ Implemented and covered by the test suite:
 | Cell-effect engine: 45 effects, masks, pipeline, seeded determinism | working |
 | Live cell-effect playback in the editor (self-stopping rAF loop) | working |
 | Layered canvas core: glyph interning, planes, compositor, dirty diff | working |
+| Generative layer: seeded node-graph fields (noise, gradient, threshold, combine) mapped to glyphs, edited in the **Gen** dock | working |
 | Animation core: 26 easings, tweens, sequences, motion paths, scenes | working |
 | Signature demo + golden-frame visual regression (`npm run demo`) | working |
 | Command palette (Ctrl+K) with tested ranking + registry-driven sections | working |
@@ -355,7 +356,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 1059 tests / 58 files, ~10 s
+npm test                          # 1101 tests / 59 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables

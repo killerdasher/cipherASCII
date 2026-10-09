@@ -4,7 +4,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore, selectCrtGlow } from '../../src/store';
 import { History } from '../../src/core/history/history';
 import { linesToGrid } from '../../src/core/grid';
-import type { Document } from '../../src/core/types';
+import { defaultGeneratorGraph, setNodeParam } from '../../src/core/generators/edit';
+import type { CreativeLayer, Document } from '../../src/core/types';
 
 describe('view state', () => {
   beforeEach(() => {
@@ -334,5 +335,109 @@ describe('selection and clipboard', () => {
     useStore.getState().newDocument();
     expect(useStore.getState().selection.bounds).toBeNull();
     expect(useStore.getState().clipboard).not.toBeNull();
+  });
+});
+
+
+describe('generative layers (store)', () => {
+  beforeEach(() => {
+    useStore.getState().newDocument();
+  });
+
+  it('addCreativeLayer creates a starter graph and its layer as one undo step', () => {
+    const before = useStore.getState().document;
+    const layerId = useStore.getState().addCreativeLayer();
+    expect(layerId).toBeTruthy();
+
+    const st = useStore.getState();
+    expect(st.document).not.toBe(before);
+    expect(st.document.generators).toHaveLength(1);
+    expect(st.document.generators[0].name).toBe('Drift');
+    const created = st.document.layers.find((l) => l.id === layerId);
+    expect(created?.kind).toBe('creative');
+    expect((created as CreativeLayer).grid).toBeNull();
+    expect((created as CreativeLayer).graphId).toBe(st.document.generators[0].id);
+    expect(st.isDirty).toBe(true);
+
+    // A single undo takes the layer *and* its graph back out.
+    useStore.getState().undo();
+    const back = useStore.getState().document;
+    expect(back.layers.some((l) => l.id === layerId)).toBe(false);
+    expect(back.generators).toHaveLength(0);
+  });
+
+  it('refreshCreativeLayers fills the derived cache and then goes quiet', () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+    expect(useStore.getState().refreshCreativeLayers()).toBe(1);
+
+    const doc = useStore.getState().document;
+    const layer = doc.layers.find((l) => l.id === layerId) as CreativeLayer;
+    expect(layer.grid).not.toBeNull();
+    expect(layer.grid!.width).toBe(doc.canvas.width);
+    expect(layer.grid!.height).toBe(doc.canvas.height);
+    expect(layer.cacheKey).not.toBe('');
+    // Fresh now: the next pass has nothing to evaluate.
+    expect(useStore.getState().refreshCreativeLayers()).toBe(0);
+  });
+
+  it('the refresh stays out of history: undo still removes layer and graph together', () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+    useStore.getState().refreshCreativeLayers();
+    useStore.getState().undo();
+    const doc = useStore.getState().document;
+    expect(doc.layers.some((l) => l.id === layerId)).toBe(false);
+    expect(doc.generators).toHaveLength(0);
+  });
+
+  it('re-evaluates after a graph edit and reports a broken graph binding', () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+    useStore.getState().refreshCreativeLayers();
+    const firstKey = (useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer)
+      .cacheKey;
+
+    const graph = useStore.getState().document.generators[0];
+    const edited = setNodeParam(graph, 'cut', 'threshold', 0.9);
+    if (!edited.ok) throw new Error(edited.error.message);
+    expect(useStore.getState().upsertGenerator(edited.value)).toBe(true);
+    expect(useStore.getState().refreshCreativeLayers()).toBe(1);
+    const after = useStore.getState().document.layers.find((l) => l.id === layerId) as CreativeLayer;
+    expect(after.cacheKey).not.toBe(firstKey);
+    expect(after.grid).not.toBeNull();
+
+    // A dangling graph id reports instead of throwing, and changes nothing.
+    useStore.getState().updateCreativeLayer(layerId, { graphId: 'missing' });
+    const broken = useStore.getState().document;
+    expect(useStore.getState().refreshCreativeLayers()).toBe(0);
+    expect(useStore.getState().document).toBe(broken);
+    expect(useStore.getState().statusMessage).toContain('missing');
+  });
+
+  it('upsertGenerator rejects an invalid graph with a message', () => {
+    const before = useStore.getState().document;
+    const ok = useStore.getState().upsertGenerator({
+      id: 'bad',
+      name: '',
+      seed: 0,
+      nodes: [],
+      edges: [],
+      output: '',
+    });
+    expect(ok).toBe(false);
+    expect(useStore.getState().document).toBe(before);
+    expect(useStore.getState().statusMessage).toContain('Generator graph invalid');
+  });
+
+  it('removeGenerator refuses while a layer points at the graph', () => {
+    const layerId = useStore.getState().addCreativeLayer()!;
+    const inUse = useStore.getState().document.generators[0].id;
+
+    expect(useStore.getState().removeGenerator(inUse)).toBe(false);
+    expect(useStore.getState().statusMessage).toContain('used by');
+    expect(useStore.getState().document.generators).toHaveLength(1);
+
+    expect(useStore.getState().upsertGenerator(defaultGeneratorGraph('spare'))).toBe(true);
+    useStore.getState().updateCreativeLayer(layerId, { graphId: 'spare' });
+    expect(useStore.getState().removeGenerator(inUse)).toBe(true);
+    expect(useStore.getState().document.generators.map((g) => g.id)).toEqual(['spare']);
   });
 });

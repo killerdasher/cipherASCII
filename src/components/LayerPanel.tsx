@@ -9,7 +9,7 @@ interface LayerPanelProps {
 }
 
 function LayerPanelInner({ layers, activeLayerId }: LayerPanelProps) {
-  const { setActiveLayer, addLayer, removeLayer, duplicateLayer, moveLayer } = useStore();
+  const { setActiveLayer, addLayer, removeLayer, duplicateLayer, moveLayer, addCreativeLayer } = useStore();
 
   const handleDragStart = (e: React.DragEvent, layerId: string) => {
     e.dataTransfer.setData('text/plain', layerId);
@@ -81,6 +81,9 @@ function LayerPanelInner({ layers, activeLayerId }: LayerPanelProps) {
           });
         }}>
           + Add Layer
+        </button>
+        <button className="layer-add-btn" onClick={() => addCreativeLayer()}>
+          ✦ Generative
         </button>
       </div>
     </div>

@@ -9,6 +9,7 @@ import { createGrid } from '../grid';
 import { resolveLayerBlend } from '../layer/blends';
 import {
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_CREATIVE_RENDER,
   DEFAULT_EXPORT,
   DEFAULT_FX_SEED,
   DEFAULT_IMAGE_RENDER,
@@ -172,6 +173,48 @@ function validateLayer(value: unknown, index: number): Result<Layer> {
   if (value.kind === 'image' || value.kind === 'text') {
     delete cleaned.settings;
     delete cleaned.cacheKey;
+  }
+  if (value.kind === 'creative') {
+    // Repair creative settings field-by-field so a hand-edited project
+    // loads instead of crashing the generative pipeline. Unknown mapping
+    // strategies fall back to luminance at render time and unknown dither
+    // ids are skipped, so string coercion here is enough.
+    const render = isPlainObject(value.render) ? value.render : {};
+    const mapping = isPlainObject(render.mapping) ? render.mapping : {};
+    const output = isPlainObject(render.output) ? render.output : {};
+    const num = (v: unknown, fallback: number): number =>
+      typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+    cleaned.graphId = typeof value.graphId === 'string' ? value.graphId : '';
+    cleaned.cacheKey = typeof value.cacheKey === 'string' ? value.cacheKey : '';
+    cleaned.render = {
+      ...DEFAULT_CREATIVE_RENDER,
+      mapping: {
+        ...DEFAULT_CREATIVE_RENDER.mapping,
+        strategy:
+          typeof mapping.strategy === 'string'
+            ? mapping.strategy
+            : DEFAULT_CREATIVE_RENDER.mapping.strategy,
+        radius: num(mapping.radius, DEFAULT_CREATIVE_RENDER.mapping.radius),
+        threshold: num(mapping.threshold, DEFAULT_CREATIVE_RENDER.mapping.threshold),
+        strength: num(mapping.strength, DEFAULT_CREATIVE_RENDER.mapping.strength),
+        curve: Array.isArray(mapping.curve)
+          ? mapping.curve.filter((c) => typeof c === 'number' && Number.isFinite(c))
+          : [],
+      },
+      output: {
+        charset:
+          typeof output.charset === 'string' ? output.charset : DEFAULT_CREATIVE_RENDER.output.charset,
+        offset: num(output.offset, DEFAULT_CREATIVE_RENDER.output.offset),
+        density: num(output.density, DEFAULT_CREATIVE_RENDER.output.density),
+        invert:
+          typeof output.invert === 'boolean' ? output.invert : DEFAULT_CREATIVE_RENDER.output.invert,
+        inkOrder:
+          output.inkOrder === 'measured' || output.inkOrder === 'positional'
+            ? output.inkOrder
+            : DEFAULT_CREATIVE_RENDER.output.inkOrder,
+      },
+      dither: typeof render.dither === 'string' ? render.dither : DEFAULT_CREATIVE_RENDER.dither,
+    };
   }
   if (value.grid === null || value.grid === undefined) {
     if (value.kind === 'image' || value.kind === 'text' || value.kind === 'creative') {

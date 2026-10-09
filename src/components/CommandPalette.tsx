@@ -49,6 +49,14 @@ export function buildPaletteCommands(): CommandDef[] {
     run: () => window.dispatchEvent(new Event('ascii:save')),
   });
 
+  add({
+    id: 'project.addCreative',
+    title: 'Add generative layer',
+    group: 'Project',
+    keywords: ['creative generator node graph procedural layer'],
+    run: () => s().addCreativeLayer(),
+  });
+
   // --- Edit ----------------------------------------------------------------
   add({ id: 'edit.undo', title: 'Undo', group: 'Edit', shortcut: 'Ctrl+Z', run: () => s().undo() });
   add({ id: 'edit.redo', title: 'Redo', group: 'Edit', shortcut: 'Ctrl+Shift+Z', run: () => s().redo() });
@@ -107,6 +115,7 @@ export function buildPaletteCommands(): CommandDef[] {
     ['palette', 'Palette', 'colors'],
     ['presets', 'Presets', 'render presets'],
     ['theme', 'Themes', 'colours appearance'],
+    ['generators', 'Generators', 'node graph generative creative'],
     ['settings', 'Settings', 'preferences'],
   ];
   for (const [id, title, keywords] of rightPanels) {

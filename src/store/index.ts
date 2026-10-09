@@ -13,6 +13,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import type {
   AsciiGrid,
+  CreativeLayer,
   Document,
   Layer,
   LayerId,
@@ -33,12 +34,15 @@ import type {
   Theme,
   EffectId,
 } from '../core/types';
-import { ASPECT_PRESETS, DEFAULT_FX_SEED } from '../core/types';
+import { ASPECT_PRESETS, DEFAULT_CREATIVE_RENDER, DEFAULT_FX_SEED } from '../core/types';
 import { clearSelection, emptySelection, extractSelection, pasteGrid } from '../core/selection';
 import { columnsForImageWidth } from '../core/renderImage';
 import { createDocument } from '../core/project/schema';
 import { applyCommand, type Command } from '../core/history/commands';
 import { History } from '../core/history/history';
+import { validateGeneratorGraph, type GeneratorGraph } from '../core/generators/graph';
+import { defaultGeneratorGraph } from '../core/generators/edit';
+import { creativeGridFresh, renderCreativeLayer } from '../core/layer/creative';
 import {
   CANVAS_PRESETS,
   canvasCellsToPixels,
@@ -67,6 +71,7 @@ export type RightPanelId =
   | 'palette'
   | 'presets'
   | 'theme'
+  | 'generators'
   | 'settings';
 
 export interface AppState {
@@ -169,6 +174,21 @@ export interface AppState {
   updateLayer: (layerId: LayerId, patch: Partial<Layer>) => void;
   moveLayer: (layerId: LayerId, toIndex: number) => void;
   duplicateLayer: (layerId: LayerId) => void;
+
+  // Generative layer / generator graphs (Phase 6)
+  /** Add a creative layer (creating a starter graph when none exists); returns its id. */
+  addCreativeLayer: (name?: string) => string | null;
+  /** Edit a creative layer's graph binding or render settings (undoable). */
+  updateCreativeLayer: (
+    layerId: LayerId,
+    patch: Partial<Pick<CreativeLayer, 'graphId' | 'render'>>,
+  ) => void;
+  /** Insert or replace a generator graph; returns false when invalid. */
+  upsertGenerator: (graph: GeneratorGraph) => boolean;
+  /** Remove a graph unless a creative layer still points at it. */
+  removeGenerator: (graphId: string) => boolean;
+  /** Re-evaluate every stale creative layer; returns how many were refreshed. */
+  refreshCreativeLayers: () => number;
 
   setImageSettings: (patch: Partial<ImageRenderSettings>) => void;
   /**
@@ -282,11 +302,12 @@ export interface AppState {
  *
  * - `RENDER_OUTPUT_COMMANDS` are produced by the renderer itself, so they are
  *   neither undoable authoring steps nor a reason to render again
- *   (render → grid/replace → render would otherwise spin forever).
+ *   (render → grid/replace → render would otherwise spin forever). The
+ *   creative layer's derived cache (`layer/derive`) follows the same rules.
  * - `GRID_EDIT_COMMANDS` are direct user edits to the grid: undoable, but a
  *   re-render would wipe them, so they must not schedule one.
  */
-const RENDER_OUTPUT_COMMANDS: ReadonlySet<Command['type']> = new Set(['grid/replace']);
+const RENDER_OUTPUT_COMMANDS: ReadonlySet<Command['type']> = new Set(['grid/replace', 'layer/derive']);
 const GRID_EDIT_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'grid/setCell',
   'grid/writeText',
@@ -549,6 +570,96 @@ export const useStore = create<AppState>()(
           set({ document: next, isDirty: true });
           get().triggerRender();
         }
+      },
+
+      addCreativeLayer: (name) => {
+        const { document, history } = get();
+        const layerId = `layer_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const creativeCount = document.layers.filter((l) => l.kind === 'creative').length;
+        let graphId = document.generators[0]?.id ?? null;
+        const cmds: Command[] = [];
+        if (!graphId) {
+          graphId = `gen_${Date.now()}`;
+          cmds.push({
+            type: 'generator/upsert',
+            graph: defaultGeneratorGraph(graphId, document.fxSeed),
+          });
+        }
+        const layer: CreativeLayer = {
+          id: layerId,
+          name: name ?? `Generative ${creativeCount + 1}`,
+          kind: 'creative',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blend: 'normal',
+          x: 0,
+          y: 0,
+          graphId,
+          render: structuredClone(DEFAULT_CREATIVE_RENDER),
+          grid: null,
+          cacheKey: '',
+        };
+        cmds.push({ type: 'layer/add', layer });
+        let next = document;
+        for (const cmd of cmds) next = applyCommand(next, cmd);
+        if (next === document) return null;
+        // One undo step: the starter graph and its layer land together.
+        history.push(next);
+        set({ document: next, isDirty: true });
+        return layerId;
+      },
+
+      updateCreativeLayer: (layerId, patch) => {
+        get().applyCommand({ type: 'creative/update', layerId, patch });
+      },
+
+      upsertGenerator: (graph) => {
+        const canonical = validateGeneratorGraph(graph);
+        if (!canonical.ok) {
+          get().setStatusMessage(`Generator graph invalid: ${canonical.error.message}`);
+          return false;
+        }
+        get().applyCommand({ type: 'generator/upsert', graph: canonical.value });
+        return true;
+      },
+
+      removeGenerator: (graphId) => {
+        const doc = get().document;
+        const user = doc.layers.find((l) => l.kind === 'creative' && l.graphId === graphId);
+        if (user) {
+          get().setStatusMessage(
+            `Graph is used by layer "${user.name}" - point that layer at another graph first`,
+          );
+          return false;
+        }
+        get().applyCommand({ type: 'generator/remove', graphId });
+        return true;
+      },
+
+      refreshCreativeLayers: () => {
+        const doc = get().document;
+        const canvas = { width: doc.canvas.width, height: doc.canvas.height };
+        let count = 0;
+        for (const layer of doc.layers) {
+          if (layer.kind !== 'creative') continue;
+          if (creativeGridFresh(layer, doc.generators, canvas, doc.fxSeed)) continue;
+          const result = renderCreativeLayer(doc.generators, layer, canvas, doc.fxSeed);
+          if (result.ok) {
+            // Derived cache: `layer/derive` is in RENDER_OUTPUT_COMMANDS, so
+            // it never lands in history and never schedules a worker render.
+            get().applyCommand({
+              type: 'layer/derive',
+              layerId: layer.id,
+              grid: result.value.grid,
+              cacheKey: result.value.cacheKey,
+            });
+            count++;
+          } else {
+            get().setStatusMessage(`Generative layer "${layer.name}": ${result.error.message}`);
+          }
+        }
+        return count;
       },
 
       setImageSettings: (patch) => {

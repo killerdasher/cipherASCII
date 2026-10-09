@@ -67,6 +67,29 @@ export interface GeneratorNodeContext {
   seed: number;
 }
 
+/** Numeric parameter of a node kind: editable from the graph editor. */
+export interface GeneratorParamNumberDef {
+  key: string;
+  label: string;
+  type: 'number';
+  min: number;
+  max: number;
+  step: number;
+  /** Same fallback the node's `evaluate` uses when the key is absent. */
+  default: number;
+}
+
+/** Enumerated parameter of a node kind (drop-down in the graph editor). */
+export interface GeneratorParamSelectDef {
+  key: string;
+  label: string;
+  type: 'select';
+  default: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}
+
+export type GeneratorParamDef = GeneratorParamNumberDef | GeneratorParamSelectDef;
+
 export interface GeneratorNodeDef {
   id: string;
   label: string;
@@ -75,6 +98,12 @@ export interface GeneratorNodeDef {
   minInputs: number;
   /** Most input slots the node reads; `Infinity` for reducers. */
   maxInputs: number;
+  /**
+   * Editable parameters in editor order. The keys mirror what `evaluate`
+   * reads; defaults mirror its fallbacks, so an empty `params` object and an
+   * explicitly-defaulted one behave identically.
+   */
+  params: readonly GeneratorParamDef[];
   evaluate(ctx: GeneratorNodeContext): Result<Float32Array>;
 }
 
@@ -135,6 +164,7 @@ const constantNode: GeneratorNodeDef = {
   description: 'Fills the field with a single value.',
   minInputs: 0,
   maxInputs: 0,
+  params: [{ key: 'value', label: 'Value', type: 'number', min: 0, max: 1, step: 0.01, default: 0.5 }],
   evaluate(ctx) {
     return ok(fill(ctx.width, ctx.height, numParam(ctx, 'value', 0.5)));
   },
@@ -146,6 +176,20 @@ const gradientNode: GeneratorNodeDef = {
   description: 'Linear ramp from `from` to `to` along the x or y axis.',
   minInputs: 0,
   maxInputs: 0,
+  params: [
+    {
+      key: 'axis',
+      label: 'Axis',
+      type: 'select',
+      default: 'x',
+      options: [
+        { value: 'x', label: 'Horizontal' },
+        { value: 'y', label: 'Vertical' },
+      ],
+    },
+    { key: 'from', label: 'From', type: 'number', min: -1, max: 2, step: 0.01, default: 0 },
+    { key: 'to', label: 'To', type: 'number', min: -1, max: 2, step: 0.01, default: 1 },
+  ],
   evaluate(ctx) {
     const axis = strParam(ctx, 'axis', 'x');
     if (axis !== 'x' && axis !== 'y') {
@@ -172,6 +216,11 @@ const valueNoiseNode: GeneratorNodeDef = {
   description: 'Smooth seeded noise; `scale` is the feature size in cells, `octaves` adds detail.',
   minInputs: 0,
   maxInputs: 0,
+  params: [
+    { key: 'scale', label: 'Scale (cells)', type: 'number', min: 0.5, max: 64, step: 0.5, default: 16 },
+    { key: 'octaves', label: 'Octaves', type: 'number', min: 1, max: 6, step: 1, default: 1 },
+    { key: 'seed', label: 'Seed', type: 'number', min: -9999, max: 9999, step: 1, default: 0 },
+  ],
   evaluate(ctx) {
     const scale = Math.max(0.5, numParam(ctx, 'scale', 16));
     const octaves = clamp(Math.round(numParam(ctx, 'octaves', 1)), 1, 6);
@@ -204,6 +253,10 @@ const thresholdNode: GeneratorNodeDef = {
   description: 'Cuts the input at `threshold`; `softness` widens the cut into a ramp.',
   minInputs: 1,
   maxInputs: 1,
+  params: [
+    { key: 'threshold', label: 'Threshold', type: 'number', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { key: 'softness', label: 'Softness', type: 'number', min: 0, max: 1, step: 0.01, default: 0 },
+  ],
   evaluate(ctx) {
     const input = ctx.inputs[0];
     const t = numParam(ctx, 'threshold', 0.5);
@@ -231,6 +284,21 @@ const combineNode: GeneratorNodeDef = {
     'Reduces two or more inputs left-to-right with `mode`: add, subtract, multiply, min or max.',
   minInputs: 2,
   maxInputs: Number.POSITIVE_INFINITY,
+  params: [
+    {
+      key: 'mode',
+      label: 'Mode',
+      type: 'select',
+      default: 'add',
+      options: [
+        { value: 'add', label: 'Add' },
+        { value: 'subtract', label: 'Subtract' },
+        { value: 'multiply', label: 'Multiply' },
+        { value: 'min', label: 'Min' },
+        { value: 'max', label: 'Max' },
+      ],
+    },
+  ],
   evaluate(ctx) {
     const mode = strParam(ctx, 'mode', 'add');
     if (!COMBINE_MODES.has(mode)) {

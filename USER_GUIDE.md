@@ -49,8 +49,8 @@ desktop shortcut named **cipherASCII**.
 
 | Tab | What it does |
 | --- | --- |
-| **Layers** | List of layers; show/hide, lock, duplicate, delete, add an 80x24 ASCII layer |
-| **Properties** | Name, visibility, lock, opacity, X/Y offset; for text layers the text itself |
+| **Layers** | List of layers; show/hide, lock, duplicate, delete, add an 80x24 ASCII layer or a **Generative** layer |
+| **Properties** | Name, visibility, lock, opacity, X/Y offset; for text layers the text itself; for generative layers the graph, mapping strategy, dither, invert, density and glyph offset |
 | **ASCII** | The render controls: columns, render mode, character ramp (click a glyph to add it), custom ramp string, **Sort ramp dark → light** (heuristic ink coverage) and **Sort by measured ink** (rasterises each glyph on a canvas - best for injected CJK/emoji), offset, density, invert, dither algorithm + strength, brightness/contrast/gamma |
 | **Timeline** | Animation: transport (play/stop with looping), time display, ruler with click-to-seek, tracks with keyframes (◆ adds a keyframe at the playhead, click a diamond to remove it), onion skin |
 
@@ -63,6 +63,7 @@ desktop shortcut named **cipherASCII**.
 | **Palette** | Palettes list, create/import, edit colours, sort by luminance/hue/saturation, and **Auto Palette - 5 Colors** |
 | **Presets** | Save the current render settings as a named preset and re-apply it later |
 | **Theme** | 10 built-in themes (Medieval, Dither Boy, Terminal Green, Terminal Amber, Light, High Contrast, Gothic Medieval, Cyber Y2K, Cozy Cafe French, Zelda / RPG) plus a "Create Custom Theme" dialog |
+| **Gen** | The generator node graph: pick a graph, add/remove nodes, wire inputs (drop-downs only offer nodes earlier in the dependency order, so cycles are impossible), tune parameters and choose which node becomes the field |
 | **Settings** | **Canvas presets** (TikTok / Reels, square, wide banner, HD - snapped to the 8 x 16 cell grid), image settings (columns, mode, fit, dither, invert), text settings (font, style, scale), canvas size and the **subtexture mask** |
 
 ## 3. Typical workflows
@@ -102,6 +103,23 @@ desktop shortcut named **cipherASCII**.
    outline, double, banner, frame) and scale.
 3. Export when happy.
 
+### Generate
+
+A **generative layer** turns seeded math into characters instead of an image:
+
+1. Click **✦ Generative** in the Layers tab (or run *Add generative layer*
+   from the command palette). The first click also creates a starter graph -
+   value noise cut by a soft threshold - and the layer shows up immediately.
+2. Open the **Gen** tab in the right dock to edit the graph: add nodes
+   (Constant, Gradient, Value noise, Threshold, Combine), wire inputs with the
+   drop-downs and pick which node becomes the output.
+3. Shape the characters in **Properties → Generative**: mapping strategy,
+   dither, invert, density and glyph offset. Every change re-evaluates
+   instantly; resizing the canvas or changing the seed re-evaluates too.
+
+Graphs are non-destructive: the layer caches its output, undo treats only your
+edits as steps, and two layers can share one graph.
+
 ### Canvas presets
 
 1. Open **Settings** (right dock) and choose a **Preset** under *Canvas*:
@@ -127,6 +145,7 @@ control:
 
 | Tool | Shortcut | What it does |
 | --- | --- | --- |
+| **Select** (dashed box) | `S` | Drag a rectangle, or click a cell to grab the whole region a fill would cover. The selection clips the brush and fill; **Ctrl+C / Ctrl+X / Ctrl+V** copy, cut and paste, `Delete` clears it, `Esc` dismisses it |
 | **Brush** (pen) | `B` | Paints the **Char** in the selected **Colour** with the selected **Size** (1, 3 or 5 cells) |
 | **Eraser** | `E` | Paints spaces and clears their colour |
 | **Fill** (droplet) | `F` | Flood-fills the contiguous region of the cell you click |
@@ -197,7 +216,10 @@ control:
 | `Ctrl+P` | Right dock -> Palette |
 | `Ctrl+E` | Right dock -> Effects |
 | `Space` | Toggle terminal preview |
-| `B` / `E` / `F` / `I` / `H` | Brush / Eraser / Fill / Pick / Pan (unmodified letters) |
+| `S` / `B` / `E` / `F` / `I` / `H` | Select / Brush / Eraser / Fill / Pick / Pan (unmodified letters) |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste the selection |
+| `Delete` | Clear the selection (keeps the clipboard) |
+| `Esc` | Dismiss the selection |
 
 ## 5. Export formats
 

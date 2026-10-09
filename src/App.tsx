@@ -23,6 +23,7 @@ import { PalettePanel } from './components/PalettePanel';
 import { PresetPanel } from './components/PresetPanel';
 import { ThemePanel } from './components/ThemePanel';
 import { AsciiControlsPanel } from './components/AsciiControlsPanel';
+import { GeneratorPanel } from './components/GeneratorPanel';
 import { ImportImageButton, ImageDropZone } from './components/ImportImage';
 import { renderImage, renderText, StaleRenderError } from './worker/client';
 import { advanceFrame } from './core/timeline/playback';
@@ -40,6 +41,7 @@ const RIGHT_TABS: Array<{ id: RightPanelId; label: string }> = [
   { id: 'palette', label: 'Palette' },
   { id: 'presets', label: 'Presets' },
   { id: 'theme', label: 'Theme' },
+  { id: 'generators', label: 'Gen' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -222,6 +224,15 @@ const {
     const timer = window.setTimeout(doRender, RENDER_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [renderGeneration, pendingRender]);
+
+  // Creative layers re-evaluate whenever any input changes (graph content,
+  // render settings, canvas size, seed). The cache-key check is a couple of
+  // string compares for a fresh layer; a stale one recomputes and writes a
+  // non-undoable `layer/derive` (RENDER_OUTPUT_COMMANDS), which lands a new
+  // document and brings us back here with a matching key - no loop.
+  useEffect(() => {
+    useStore.getState().refreshCreativeLayers();
+  }, [document]);
 
   // Timeline playback: a rAF loop advancing the playhead at the timeline's
   // fps. Only the timeline slice changes - the document and the render
@@ -512,6 +523,7 @@ const {
                 {activeRightPanel === 'palette' && <PalettePanel />}
                 {activeRightPanel === 'presets' && <PresetPanel />}
                 {activeRightPanel === 'theme' && <ThemePanel />}
+                {activeRightPanel === 'generators' && <GeneratorPanel />}
                 {activeRightPanel === 'settings' && (
                   <SettingsPanel
                     imageSettings={document.imageSettings}

@@ -53,6 +53,26 @@ Edits go through `applyCommand()`, so every mutation is undoable and the grid
 identity changes only when content actually changes — the renderer and the
 cell-effect runtime both key off that identity.
 
+### Generative layers
+
+A `CreativeLayer` carries no characters of its own: it points at a
+`GeneratorGraph` in `Document.generators` and *derives* its grid. After each
+document change the store refreshes every stale creative layer
+(`refreshCreativeLayers`), evaluating the graph at canvas size and running the
+field through the same clamp → mapping → invert → dither → glyph-selection
+chain the image renderer uses (`renderCreativeLayer` in
+`src/core/layer/creative.ts`). The result lands via the `layer/derive`
+command, which — like the worker's `grid/replace` — is deliberately **not** an
+undoable authoring step and never schedules a render.
+
+Freshness is one string compare: `creativeCacheKey` folds the graph *content*
+(nodes, wiring, output choice), the layer's render settings, the canvas size
+and `fxSeed` into the key, so editing a parameter, rewiring an edge, resizing
+the canvas or reseeding invalidates the cache exactly once. The node editor
+lives in the right dock (**Gen**, `GeneratorPanel.tsx`); every edit runs
+through `core/generators/edit.ts`, which cycle-checks new edges with the same
+topological order the evaluator uses.
+
 ## 2. Offscreen render (worker)
 
 `renderImage()` / `renderText()` in `src/worker/client.ts` post a job to

@@ -455,10 +455,12 @@ html, body, #root {
 .layer-footer {
   border-top: 1px solid var(--border);
   padding-top: 8px;
+  display: flex;
+  gap: 6px;
 }
 
 .layer-add-btn {
-  width: 100%;
+  flex: 1;
   padding: 8px;
   background: transparent;
   border: 1px dashed var(--border);
@@ -2464,4 +2466,202 @@ input, select, textarea {
 .debug-row b {
   font-weight: 600;
   color: inherit;
+}
+
+/* --- Generators panel (node graph editor) ------------------------------ */
+
+.generator-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gen-graph-row {
+  display: flex;
+  gap: 6px;
+}
+
+.gen-graph-row select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+}
+
+.gen-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  padding: 4px 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.gen-empty p {
+  margin: 0;
+}
+
+.gen-empty button {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gen-empty button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gen-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.gen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.gen-card-output {
+  border-color: var(--accent);
+}
+
+.gen-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gen-kind {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.gen-unknown {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.gen-out-badge {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.gen-out-btn,
+.gen-del-btn {
+  padding: 2px 7px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.gen-out-btn:hover:not(:disabled),
+.gen-del-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gen-out-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gen-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gen-row-label {
+  flex-shrink: 0;
+  width: 34px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.gen-row select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 3px 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+}
+
+.gen-param {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.gen-param label {
+  flex: 0 0 78px;
+}
+
+.gen-param input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.gen-warning {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.gen-hint {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.gen-edit-link {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gen-edit-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

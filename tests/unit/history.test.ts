@@ -2,7 +2,9 @@ import { History } from '../../src/core/history/history';
 import { applyCommand, applyCommands, type Command } from '../../src/core/history/commands';
 import { createDocument } from '../../src/core/project/schema';
 import { createGrid, gridToLines, linesToGrid } from '../../src/core/grid';
-import type { AsciiGrid, AsciiLayer, Document } from '../../src/core/types';
+import type { AsciiGrid, AsciiLayer, CreativeLayer, Document } from '../../src/core/types';
+import { DEFAULT_CREATIVE_RENDER } from '../../src/core/types';
+import { defaultGeneratorGraph } from '../../src/core/generators/edit';
 
 function layer(id: string, grid: AsciiGrid, name = id): AsciiLayer {
   return {
@@ -477,5 +479,141 @@ describe('immutability', () => {
     const before = structuredClone(base);
     applyCommands(base, commands);
     expect(base).toEqual(before);
+  });
+});
+
+
+describe('applyCommand: generative layer and generators', () => {
+  function creative(id: string, graphId = 'graph-1'): CreativeLayer {
+    return {
+      id,
+      name: id,
+      kind: 'creative',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blend: 'normal',
+      x: 0,
+      y: 0,
+      graphId,
+      render: DEFAULT_CREATIVE_RENDER,
+      grid: null,
+      cacheKey: '',
+    };
+  }
+
+  function docWithCreative(): Document {
+    return createDocument({
+      layers: [layer('L1', createGrid(2, 2)), creative('C1')],
+      activeLayerId: 'C1',
+    });
+  }
+
+  const derived = linesToGrid(['@ ', ' @']);
+
+  it('layer/derive writes the derived grid and cache key on creative layers', () => {
+    const base = docWithCreative();
+    const next = applyCommand(base, {
+      type: 'layer/derive',
+      layerId: 'C1',
+      grid: derived,
+      cacheKey: 'K1',
+    });
+    const target = next.layers[1] as CreativeLayer;
+    expect(target.grid).toEqual(derived);
+    expect(target.cacheKey).toBe('K1');
+    expect(target.grid).not.toBe(derived); // cloned, not aliased
+    expect((base.layers[1] as CreativeLayer).grid).toBeNull();
+  });
+
+  it('layer/derive is idempotent for an equal grid and key', () => {
+    const once = applyCommand(docWithCreative(), {
+      type: 'layer/derive',
+      layerId: 'C1',
+      grid: derived,
+      cacheKey: 'K1',
+    });
+    const twice = applyCommand(once, {
+      type: 'layer/derive',
+      layerId: 'C1',
+      grid: derived,
+      cacheKey: 'K1',
+    });
+    expect(twice).toBe(once);
+  });
+
+  it('layer/derive never writes phantom fields onto other layer kinds', () => {
+    const base = docWithCreative();
+    const next = applyCommand(base, {
+      type: 'layer/derive',
+      layerId: 'L1',
+      grid: derived,
+      cacheKey: 'K1',
+    });
+    expect(next).toBe(base);
+    expect('cacheKey' in next.layers[0]).toBe(false);
+    expect(applyCommand(base, { type: 'layer/derive', layerId: 'ghost', grid: derived, cacheKey: 'K' })).toBe(base);
+  });
+
+  it('creative/update patches the graph binding and render settings', () => {
+    const base = docWithCreative();
+    const rebound = applyCommand(base, {
+      type: 'creative/update',
+      layerId: 'C1',
+      patch: { graphId: 'g2' },
+    });
+    expect((rebound.layers[1] as CreativeLayer).graphId).toBe('g2');
+    expect((rebound.layers[1] as CreativeLayer).render).toBe(
+      (base.layers[1] as CreativeLayer).render,
+    );
+
+    const rerendered = applyCommand(base, {
+      type: 'creative/update',
+      layerId: 'C1',
+      patch: { render: { ...DEFAULT_CREATIVE_RENDER, dither: 'bayer4' } },
+    });
+    expect((rerendered.layers[1] as CreativeLayer).render.dither).toBe('bayer4');
+
+    // A patch carrying the current values changes nothing (no identity churn).
+    const noop = applyCommand(base, {
+      type: 'creative/update',
+      layerId: 'C1',
+      patch: { graphId: 'graph-1', render: DEFAULT_CREATIVE_RENDER },
+    });
+    expect(noop).toBe(base);
+    expect(
+      applyCommand(base, { type: 'creative/update', layerId: 'L1', patch: { graphId: 'x' } }),
+    ).toBe(base);
+  });
+
+  it('generator/upsert inserts by id and replaces an existing graph', () => {
+    const graph = defaultGeneratorGraph('g1');
+    const inserted = applyCommand(createDocument(), { type: 'generator/upsert', graph });
+    expect(inserted.generators.map((g) => g.id)).toEqual(['g1']);
+
+    const replaced = applyCommand(inserted, {
+      type: 'generator/upsert',
+      graph: { ...graph, name: 'Renamed' },
+    });
+    expect(replaced.generators).toHaveLength(1);
+    expect(replaced.generators[0].name).toBe('Renamed');
+    expect(inserted.generators[0].name).toBe('Drift');
+  });
+
+  it('generator/upsert refuses a structurally invalid graph', () => {
+    const bad = { id: 'bad', name: '', seed: 0, nodes: [], edges: [], output: '' };
+    const base = createDocument();
+    const next = applyCommand(base, { type: 'generator/upsert', graph: bad });
+    expect(next).toBe(base);
+    expect(next.generators).toHaveLength(0);
+  });
+
+  it('generator/remove drops the graph and no-ops on unknown ids', () => {
+    const graph = defaultGeneratorGraph('g1');
+    const base = applyCommand(createDocument(), { type: 'generator/upsert', graph });
+    const removed = applyCommand(base, { type: 'generator/remove', graphId: 'g1' });
+    expect(removed.generators).toHaveLength(0);
+    expect(base.generators).toHaveLength(1);
+    expect(applyCommand(removed, { type: 'generator/remove', graphId: 'ghost' })).toBe(removed);
   });
 });
