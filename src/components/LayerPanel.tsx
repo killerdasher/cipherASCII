@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useStore } from '../store';
+import { useStore, useStoreShallow } from '../store';
 import { createGrid } from '../core/grid';
 import type { Layer } from '../core/types';
 
@@ -9,7 +9,15 @@ interface LayerPanelProps {
 }
 
 function LayerPanelInner({ layers, activeLayerId }: LayerPanelProps) {
-  const { setActiveLayer, addLayer, removeLayer, duplicateLayer, moveLayer, addCreativeLayer } = useStore();
+  const { setActiveLayer, addLayer, removeLayer, duplicateLayer, moveLayer, addCreativeLayer } =
+    useStoreShallow((s) => ({
+      setActiveLayer: s.setActiveLayer,
+      addLayer: s.addLayer,
+      removeLayer: s.removeLayer,
+      duplicateLayer: s.duplicateLayer,
+      moveLayer: s.moveLayer,
+      addCreativeLayer: s.addCreativeLayer,
+    }));
 
   const handleDragStart = (e: React.DragEvent, layerId: string) => {
     e.dataTransfer.setData('text/plain', layerId);

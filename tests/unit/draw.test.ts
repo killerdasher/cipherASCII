@@ -40,6 +40,15 @@ describe('paintCellInPlace', () => {
     expect(g.fg![0]).toBe(NO_COLOR);
     expect(g.fg![1]).toBe(0x00ff00);
   });
+
+  it('keeps only the first code point of a multi-character brush', () => {
+    const g = grid(['..']);
+    // Surrogate pair must survive as one code point (no half-emoji).
+    expect(paintCellInPlace(g, 0, 0, '\u{1F600}x', 0xffffff)).toBe(true);
+    expect(g.chars[0]).toBe('\u{1F600}');
+    expect(paintCellInPlace(g, 1, 0, 'ab', NO_COLOR)).toBe(true);
+    expect(g.chars[1]).toBe('a');
+  });
 });
 
 describe('stampInPlace', () => {

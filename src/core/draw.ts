@@ -12,6 +12,20 @@ import { cloneGrid } from './grid';
 import { NO_COLOR, type AsciiGrid } from './types';
 import type { SelectionClip } from './selection';
 
+/** Default clip: painting without a selection covers every cell. */
+const EVERYWHERE: SelectionClip = () => true;
+
+/**
+ * First code point of `ch`, allocation-free for the BMP case.
+ * Equivalent to `[...ch][0]` (which built a whole array per cell) but the
+ * brush stamp calls this up to `size^2` times per pointer move (P6 in
+ * docs/V2_AUDIT.md section 5), so the array is not worth allocating.
+ */
+function firstCodePoint(ch: string): string {
+  if (ch.length === 1) return ch;
+  return (ch.codePointAt(0) ?? 32) > 0xffff ? ch.slice(0, 2) : ch[0];
+}
+
 /**
  * Write one cell into a grid the caller already owns.
  *
@@ -25,11 +39,11 @@ export function paintCellInPlace(
   y: number,
   ch: string,
   color: number,
-  clip: SelectionClip = () => true,
+  clip: SelectionClip = EVERYWHERE,
 ): boolean {
   if (x < 0 || y < 0 || x >= grid.width || y >= grid.height) return false;
   if (!clip(x, y)) return false;
-  const c = ch.length === 0 ? ' ' : [...ch][0];
+  const c = ch.length === 0 ? ' ' : firstCodePoint(ch);
   const i = y * grid.width + x;
   const current = grid.fg ? grid.fg[i] : NO_COLOR;
   if (grid.chars[i] === c && current === color) return false;
@@ -51,7 +65,7 @@ export function stampInPlace(
   size: number,
   ch: string,
   color: number,
-  clip: SelectionClip = () => true,
+  clip: SelectionClip = EVERYWHERE,
 ): boolean {
   const radius = Math.floor((Math.max(1, size) - 1) / 2);
   let changed = false;
@@ -108,7 +122,7 @@ export function floodFill(
   startY: number,
   ch: string,
   color: number,
-  clip: SelectionClip = () => true,
+  clip: SelectionClip = EVERYWHERE,
 ): AsciiGrid {
   if (startX < 0 || startY < 0 || startX >= grid.width || startY >= grid.height) return grid;
   if (!clip(startX, startY)) return grid;

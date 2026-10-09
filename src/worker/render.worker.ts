@@ -23,11 +23,10 @@ import {
 import { renderCreativeLayer } from '../core/layer/creative';
 import { renderTextToGrid } from '../core/text/render';
 import { applyEffectsToRaster } from '../core/effects/pipeline';
-import { analyzeLumaChunked } from '../core/analyze';
-import { analysisSampleSize, ANALYSIS_DEFAULT_COLUMNS } from '../core/analysis/sampleSize';
-import { lumaPlane } from '../core/image/raster';
+import { ANALYSIS_DEFAULT_COLUMNS } from '../core/analysis/sampleSize';
 import { type Raster } from '../core/types';
-import { dataUrlToBitmap, dataUrlToRaster } from './raster-decode';
+import { dataUrlToRaster } from './raster-decode';
+import { runAnalysisJob } from './analysisJob';
 
 type WorkerRequest =
   | (ImageRenderRequest & { generationId?: number })
@@ -63,31 +62,6 @@ function shouldCancel(gen: number): boolean {
   return gen !== currentGeneration;
 }
 
-/**
- * Downscale a data URL to the analysis sample box and return its Rec.709
- * luminance plane. Mirrors `sampleImageLuminance` on the main thread — same
- * `analysisSampleSize` geometry, same `drawImage` downscale — so both paths
- * measure the same plane.
- */
-async function sampleAnalysisLuma(
-  dataUrl: string,
-  columns: number,
-): Promise<{ luma: Float32Array; width: number; height: number }> {
-  const bitmap = await dataUrlToBitmap(dataUrl);
-  try {
-    const { width, height } = analysisSampleSize(bitmap.width, bitmap.height, columns);
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('OffscreenCanvas 2D unavailable for image analysis.');
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    const image = ctx.getImageData(0, 0, width, height);
-    const raster: Raster = { width, height, data: image.data };
-    return { luma: lumaPlane(raster, 'rec709'), width, height };
-  } finally {
-    bitmap.close();
-  }
-}
-
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   const jobId = msg.jobId;
@@ -114,13 +88,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // must not touch `currentGeneration`, and its replies echo the request's
     // own generation so the client can correlate them.
     try {
-      const { luma, width, height } = await sampleAnalysisLuma(
-        msg.dataUrl,
-        msg.columns ?? ANALYSIS_DEFAULT_COLUMNS,
-      );
-      const result = await analyzeLumaChunked(luma, width, height, {}, () =>
-        new Promise<void>((resolve) => setTimeout(resolve, 0)),
-      );
+      const result = await runAnalysisJob(msg.dataUrl, msg.columns ?? ANALYSIS_DEFAULT_COLUMNS);
       self.postMessage({ kind: 'analysis', jobId, generationId: msg.generationId, result });
     } catch (e) {
       postError(

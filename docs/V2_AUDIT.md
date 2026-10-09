@@ -212,15 +212,15 @@ resolved), [`ARCHITECTURE.md`](../ARCHITECTURE.md), [`RENDERING.md`](RENDERING.m
 
 | # | Risk | Evidence |
 |---|---|---|
-| P1 | **Full image re-decode per render** — `activeLayer.source.dataUrl` posted every time, no raster cache | `App.tsx:193`, `worker/raster-decode.ts` (no cache); open item in `ARCHITECTURE_AUDIT.md` §2 |
-| P2 | **Analysis cost grows with feature fields** — per-cell multi-channel features at full canvas resolution | current: image analysis 2817→1382 ms after keying fix (`analyze.ts`) |
-| P3 | **Single worker** — analysis, render, generation, export frames contend on one thread | `worker/client.ts` |
-| P4 | **Video export: full-resolution `canvas.toBlob` + structured clone per frame**, no diffing/transferables | `videoExport.ts:116-118,160` |
-| P5 | **Whole-app re-render** on store changes (partially mitigated by `React.memo` on 11 panels) | `ARCHITECTURE_AUDIT.md` §2 |
-| P6 | **Brush/clone and allocation-heavy canvas paint** — improved (clone-once `EditorCanvas.tsx:120,576`) but DOM paint still unmeasurable in Node | `docs/PERFORMANCE.md:134` |
-| P7 | **Effects run at source resolution** unless `effectSpace: 'grid'` | `docs/PERFORMANCE.md:161-170` |
-| P8 | **Glyph index build cost** — calibrating thousands of glyphs must be cached/seeded, never per-session | Phase 3 design constraint |
-| P9 | **JSON-based undo compare** was replaced by `deepEqual`, but snapshot stack still copies document references at 200 deep | `history.ts`, `store:322` |
+| P1 | **Full image re-decode per render** — `activeLayer.source.dataUrl` posted every time, no raster cache | **closed (Phase 11):** `worker/raster-decode.ts` memoises data URL → Raster per worker (capacity 1, copy-out for callers); the URL is still posted per render but that is a string clone, not a decode — `tests/unit/decodeCache.test.ts` |
+| P2 | **Analysis cost grows with feature fields** — per-cell multi-channel features at full canvas resolution | **closed:** field analysis is served by the shared 64-entry `AnalysisCache` (`src/core/analysis/cache.ts`, all-hit warm repeat asserted in `imageAnalysis.test.ts`); recommendation scoring memoised per (dataUrl, columns) in Phase 11 — `worker/analysisJob.ts`, `tests/unit/analysisJob.test.ts` |
+| P3 | **Single worker** — analysis, render, generation, export frames contend on one thread | **closed (Phase 8):** pool of up to 4 slots in `worker/client.ts` (least-busy dispatch, crash isolation, single-flight analysis) — `tests/unit/worker.test.ts` pool describe; export frame loop still main-thread (see P4) |
+| P4 | **Video export: full-resolution `canvas.toBlob` + structured clone per frame**, no diffing/transferables | **partial (Phase 11):** one canvas reused for the whole timeline (`services/videoExport.ts`); PNG encode + `writeFile` per frame remain on the main thread — documented as `PERFORMANCE.md` §6 item 6 |
+| P5 | **Whole-app re-render** on store changes (partially mitigated by `React.memo` on 11 panels) | **partial (Phase 11):** 12 panels memoized; the 5 bare `useStore()` subscriptions narrowed to selectors (StatusBar/LayerPanel/ExportPanel/SettingsPanel/PropertyPanel) — render-count assertions in `tests/unit/panelStoreSubscriptions.test.tsx`; App's own selector still re-renders the tree |
+| P6 | **Brush/clone and allocation-heavy canvas paint** — improved (clone-once `EditorCanvas.tsx:120,576`) but DOM paint still unmeasurable in Node | **partial (Phase 11):** clone-once stroke kept; cell writes are allocation-free (no per-cell array spread, shared default clip — `core/draw.ts`, `draw.test.ts`); per-stroke recompose/repaint remains and frame times are published in the debug overlay — DOM paint unmeasurable in Node (`docs/PERFORMANCE.md` §4) |
+| P7 | **Effects run at source resolution** unless `effectSpace: 'grid'` | **open by design:** default stays `'source'` (presets keep their look); the documented escape hatch `effectSpace: 'grid'` has measured numbers in `docs/PERFORMANCE.md` §6 item 1 and both paths are tested (`tests/unit/effectSpace.test.ts`) |
+| P8 | **Glyph index build cost** — calibrating thousands of glyphs must be cached/seeded, never per-session | **closed (Phase 3):** offline `npm run calibrate` table, per-ramp `indexCache`, hot path uses `sortRampByInk` — `tests/unit/calibration.test.ts` |
+| P9 | **JSON-based undo compare** was replaced by `deepEqual`, but snapshot stack still copies document references at 200 deep | **partial:** compare is `deepEqual` (`PERFORMANCE.md` §6 item 5); snapshots are reference-shared (`core/history/history.ts` — structural sharing, only replaced grids cloned) under a 200-step cap that drops the oldest; a byte budget is not implemented |
 
 ---
 
@@ -278,7 +278,7 @@ Design rules carried into every phase:
 | 8 | Worker pool | 2, 4, 6 | done |
 | 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 | done |
 | 10 | Persistence completeness + autosave + native dialogs | 1 | done |
-| 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | pending |
+| 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | done |
 | 12 | Docs, README, benchmarks, screenshots refresh | all | pending |
 
 Phase exit rule: typecheck + lint + all tests + demo + bench:engines green, golden

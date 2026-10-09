@@ -1,5 +1,5 @@
 import { useRef, useState, memo } from 'react';
-import { useStore } from '../store';
+import { useStoreShallow } from '../store';
 import { listExporters, runExport, renderExportFrame } from '../core/export';
 import { drawGridToContext, type CanvasLike } from '../core/export/png';
 import { VIDEO_FORMATS } from '../core/export/videoArgs';
@@ -30,7 +30,10 @@ const PROGRESS_LABELS: Record<ExportProgress['phase'], string> = {
 };
 
 function ExportPanelInner() {
-  const { document, timeline } = useStore();
+  const { document, timeline } = useStoreShallow((s) => ({
+    document: s.document,
+    timeline: s.timeline,
+  }));
   const [format, setFormat] = useState('txt');
   const [output, setOutput] = useState('');
   const [downloading, setDownloading] = useState(false);

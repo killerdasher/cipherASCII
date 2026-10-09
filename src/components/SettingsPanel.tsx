@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { useStore } from '../store';
+import { useStore, useStoreShallow } from '../store';
 import { CipherAsciiLogo } from './CipherAsciiLogo';
 import { Slider } from './Slider';
 import {
@@ -34,7 +34,16 @@ function SettingsPanelInner({ imageSettings, textSettings, canvasSettings }: Set
     toggleDebugOverlay,
     qualityMode,
     debugOverlay,
-  } = useStore();
+  } = useStoreShallow((s) => ({
+    setImageSettings: s.setImageSettings,
+    setTextSettings: s.setTextSettings,
+    setCanvasSettings: s.setCanvasSettings,
+    applyCanvasPreset: s.applyCanvasPreset,
+    setQualityMode: s.setQualityMode,
+    toggleDebugOverlay: s.toggleDebugOverlay,
+    qualityMode: s.qualityMode,
+    debugOverlay: s.debugOverlay,
+  }));
   const [autoLevelsBusy, setAutoLevelsBusy] = useState(false);
 
   const runAutoLevels = async () => {

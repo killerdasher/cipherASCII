@@ -133,10 +133,15 @@ constraint at any realistic scene size.
 | 60 ms render debounce | Slider bursts coalesce into one worker render | code + status path; manual verification |
 | Clone-once brush stroke | 24–57× faster per 64-cell stroke | `npm run bench:engines` |
 | Cached `fillStyle`, single-path grid lines, resize-only backing store | Fewer canvas state resets and string parses per paint | code (DOM paint not measurable in Node) |
-| `React.memo` on 11 panels + hoisted cursor literal | Panels skip re-renders caused by unrelated App state | code |
+| `React.memo` on 12 panels + hoisted cursor literal; narrow store selectors (Phase 11) | Panels skip re-renders caused by unrelated App state; the five former whole-state subscriptions no longer wake on status/perf/view writes | `tests/unit/panelStoreSubscriptions.test.tsx` (4 cases) |
 | Interned glyphs, packed colours, SoA planes | Frame storage in indices, not strings | `docs/RENDERING.md` |
 | Pooled `ParticleSystem`, reusable frame buffers, shared `GlyphTable` | Zero per-frame allocation in the hot paths | `tests/unit/fx.test.ts`, `fxRuntime.test.ts` |
 | Effect slot settling | A finished one-shot is never visited again | `needsFrames` → `null` frame → rAF loop cancels |
+| Worker raster decode cache (P1) | A source image is `atob` + bitmap-decoded **once per worker** instead of once per render; callers receive a private copy so downstream effects can never poison the cache | `tests/unit/decodeCache.test.ts` (6 cases), `src/worker/raster-decode.ts` |
+| Memoised recommendation analysis (P2) | Sample + dither/ladder scoring keyed on (dataUrl, columns) - repeated runs on the same image are cache hits (2 entries, concurrent runs deduped) | `tests/unit/analysisJob.test.ts` (6 cases) |
+| Narrow panel subscriptions (P5) | StatusBar / LayerPanel / ExportPanel / SettingsPanel / PropertyPanel take narrow selectors instead of whole-state snapshots; document and prop changes still land | `tests/unit/panelStoreSubscriptions.test.tsx` (4 cases) |
+| One canvas per video export (P4) | Frame rasterisation reuses a single backing store instead of allocating a canvas per frame (PNG encode per frame remains - see section 6 item 6) | `src/services/videoExport.ts` (DOM not measurable in Node) |
+| Allocation-free brush cells (P6) | First-code-point extraction without array spread + a shared default clip per stamped cell | `tests/unit/draw.test.ts` |
 
 ## 5. Idle cost
 
@@ -191,6 +196,14 @@ These are real and documented rather than papered over (they come from
 5. ~~**`JSON.stringify` comparison** of render settings on undo/redo~~ —
    closed: `renderSettingsChanged` uses the structural `deepEqual` in
    `src/core/util.ts`.
+6. **Video export PNG-encodes every frame on the main thread**
+   (`src/services/videoExport.ts`): the perf pass reused one canvas for the
+   whole timeline, but each frame still pays `drawGridToContext` + optional
+   subtexture round-trip + `canvas.toBlob` + `writeFile`. No per-frame
+   diffing or transferables; the loop reports `render` progress per frame so
+   the cost stays visible in the export bar. Moving the encode off-thread
+   needs an `OffscreenCanvas` worker job with font parity - deliberately out
+   of scope for this pass.
 
 ## 7. Quality modes, adaptive control and the debug overlay
 

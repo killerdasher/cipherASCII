@@ -10,7 +10,7 @@ interface StatusBarProps {
 }
 
 function StatusBarInner({ isDirty, renderGeneration, pendingRender, cursor, zoomLevel }: StatusBarProps) {
-  const { statusMessage } = useStore();
+  const statusMessage = useStore((s) => s.statusMessage);
 
   return (
     <footer className="status-bar">

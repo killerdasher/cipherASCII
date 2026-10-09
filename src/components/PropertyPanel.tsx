@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useStore } from '../store';
+import { useStore, useStoreShallow } from '../store';
 import type { DitherId, Layer, LayerBlend, MappingId } from '../core/types';
 import { LAYER_BLENDS } from '../core/layer/blends';
 import { listDitherAlgorithms } from '../core/dither';
@@ -12,7 +12,11 @@ interface PropertyPanelProps {
 
 function PropertyPanelInner({ layer }: PropertyPanelProps) {
   // Hooks run before any early return so React always sees the same hook order.
-  const { updateLayer, updateCreativeLayer, setActiveRightPanel } = useStore();
+  const { updateLayer, updateCreativeLayer, setActiveRightPanel } = useStoreShallow((s) => ({
+    updateLayer: s.updateLayer,
+    updateCreativeLayer: s.updateCreativeLayer,
+    setActiveRightPanel: s.setActiveRightPanel,
+  }));
   const generators = useStore((s) => s.document.generators);
   const mappingStrategies = listMappingStrategies();
   const dithers = listDitherAlgorithms();

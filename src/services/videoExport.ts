@@ -87,14 +87,20 @@ function getFFmpeg(): Promise<FFmpeg> {
   return ffmpegPromise;
 }
 
-/** Rasterise one composed export frame to PNG bytes (PNG-export cell metrics). */
+/**
+ * Rasterise one composed export frame to PNG bytes (PNG-export cell metrics).
+ *
+ * `canvas` is reused for every frame of the export: the grid dimensions are
+ * constant for a timeline, so allocating a fresh backing store per frame was
+ * pure garbage (P4 in docs/V2_AUDIT.md section 5).
+ */
 async function rasterizeFramePng(
+  canvas: HTMLCanvasElement,
   grid: AsciiGrid,
   background: number,
   foreground: number,
   subtexture: Document['canvas']['subtexture'],
 ): Promise<Uint8Array> {
-  const canvas = window.document.createElement('canvas');
   canvas.width = grid.width * VIDEO_CELL.width * VIDEO_CELL.scale;
   canvas.height = grid.height * VIDEO_CELL.height * VIDEO_CELL.scale;
   const ctx = canvas.getContext('2d');
@@ -156,9 +162,11 @@ export async function exportVideo({
     report('encode', Math.min(1, Math.max(0, progress)));
   ffmpeg.on('progress', onEncode);
 
+  const frameCanvas = window.document.createElement('canvas');
   try {
     for (let i = 0; i < frames.length; i++) {
       const png = await rasterizeFramePng(
+        frameCanvas,
         renderFrame(frames[i]),
         background,
         foreground,

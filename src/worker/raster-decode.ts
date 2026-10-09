@@ -1,10 +1,18 @@
 /**
  * Data URL → Raster decoder for the worker.
  * Uses OffscreenCanvas / createImageBitmap for zero-dependency decoding.
+ *
+ * Decoded rasters are cached by data URL (P1 in docs/V2_AUDIT.md §5): a photo
+ * is base64-decoded + bitmap-decoded + copied **once per worker** instead of
+ * once per render, and callers still receive their own copy to mutate.
  */
 
 import { createRaster } from '../core/image/raster';
 import type { Raster } from '../core/types';
+import { createKeyCache } from './decodeCache';
+
+/** One resident raster per worker: the current image, nothing else. */
+const rasterCache = createKeyCache<Raster>(1);
 
 function parseDataUrl(dataUrl: string): { mime: string; data: Uint8Array } | null {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -39,11 +47,33 @@ async function bitmapToRaster(bitmap: ImageBitmap): Promise<Raster> {
   return raster;
 }
 
-export async function dataUrlToRaster(dataUrl: string): Promise<Raster> {
+async function decodeRaster(dataUrl: string): Promise<Raster> {
   const bitmap = await dataUrlToBitmap(dataUrl);
   try {
     return await bitmapToRaster(bitmap);
   } finally {
     bitmap.close();
   }
+}
+
+/**
+ * Decode a data URL to a `Raster`, memoised on the URL.
+ *
+ * The cache keeps the pristine decode; every caller gets a fresh copy, so the
+ * effect pipeline (which mutates its input frame downstream) can never poison
+ * the cache. A copy is one RGBA `slice()` — orders of magnitude cheaper than
+ * the `atob` + bitmap decode it replaces on repeat renders.
+ */
+export async function dataUrlToRaster(dataUrl: string): Promise<Raster> {
+  const pristine = await rasterCache.getOrPut(dataUrl, () => decodeRaster(dataUrl));
+  return {
+    width: pristine.width,
+    height: pristine.height,
+    data: pristine.data.slice(),
+  };
+}
+
+/** Drop the resident decode (tests, image swaps that must not keep pixels). */
+export function clearRasterDecodeCache(): void {
+  rasterCache.clear();
 }
