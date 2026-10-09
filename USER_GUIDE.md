@@ -91,7 +91,8 @@ desktop shortcut named **cipherASCII**.
 6. Add **effects** (right) such as bloom, diffraction stars, scanlines or
    chromatic aberration - they run in the render worker before the characters
    are picked, so the grid updates as you tune them.
-7. **Export** as PNG (a real raster rendering of the grid), as text formats
+7. **Export** as PNG (a real raster rendering of the composed frame — every
+   visible layer, the timeline playhead and the cell effects), as text formats
    (TXT/ANSI/HTML/SVG/JSON/AAP) for pasting into a terminal or editor, or as
    **MP4** / **GIF** of the whole timeline.
 

@@ -1,6 +1,6 @@
 import { useRef, useState, memo } from 'react';
 import { useStore } from '../store';
-import { listExporters, runExport } from '../core/export';
+import { listExporters, runExport, renderExportFrame } from '../core/export';
 import { drawGridToContext, type CanvasLike } from '../core/export/png';
 import { VIDEO_FORMATS } from '../core/export/videoArgs';
 import { applySubtexture, shouldApplySubtexture } from '../core/subtexture';
@@ -39,7 +39,6 @@ function ExportPanelInner() {
 
   const exporters = listExporters();
   const exporter = exporters.find((e) => e.id === format);
-  const activeGrid = document.layers.find((l) => l.id === document.activeLayerId)?.grid;
   const allFormats = [
     ...exporters.map((e) => ({ id: e.id, label: FORMAT_LABELS[e.id] ?? e.id })),
     ...VIDEO_FORMATS.map((f) => ({ id: f.id, label: f.label })),
@@ -81,10 +80,19 @@ function ExportPanelInner() {
         return;
       }
 
-      // ---- PNG: rasterise the active layer ----
+      // ---- One frame for every static format: the unified renderer ----
+      // Full visible stack + timeline frame + cell effects — the exact grid
+      // video frame 0 would show at the playhead, not just the active layer.
+      const grid = renderExportFrame(document, {
+        timeline,
+        frame: timeline?.currentFrame ?? 0,
+        paper: themeColor('--bg-elevated', themeColor('--bg', 0x0c0c10)),
+      });
+
+      // ---- PNG: rasterise that frame ----
       if (format === 'png') {
-        if (!activeGrid || activeGrid.width === 0) {
-          setOutput('Error: the active layer has no rendered grid yet');
+        if (grid.width === 0) {
+          setOutput('Error: the canvas has no cells to rasterize');
           return;
         }
         const canvas = window.document.createElement('canvas');
@@ -93,13 +101,13 @@ function ExportPanelInner() {
           setOutput('Error: a 2D canvas is unavailable, cannot rasterize PNG');
           return;
         }
-        canvas.width = activeGrid.width * PNG_CELL.width * PNG_CELL.scale;
-        canvas.height = activeGrid.height * PNG_CELL.height * PNG_CELL.scale;
+        canvas.width = grid.width * PNG_CELL.width * PNG_CELL.scale;
+        canvas.height = grid.height * PNG_CELL.height * PNG_CELL.scale;
         // The core's CanvasLike types fillStyle as a plain `string` so it can
         // stay DOM-free; a real context is structurally identical apart from
         // also allowing gradients/patterns.
         const target = ctx as unknown as CanvasLike;
-        const painted = drawGridToContext(target, activeGrid, {
+        const painted = drawGridToContext(target, grid, {
           cellWidth: PNG_CELL.width,
           cellHeight: PNG_CELL.height,
           scale: PNG_CELL.scale,
@@ -126,7 +134,7 @@ function ExportPanelInner() {
         binaryRef.current = blob;
         setOutput(
           `PNG rendered: ${painted.width}x${painted.height} px from a ` +
-            `${activeGrid.width}x${activeGrid.height} character grid` +
+            `${grid.width}x${grid.height} composed frame` +
             (masked ? ` with the ${subtexture.pattern} subtexture mask` : '') +
             `.\nPress Download to save the file.`,
         );
@@ -134,7 +142,7 @@ function ExportPanelInner() {
       }
 
       const ctx = {
-        grid: activeGrid || { width: 0, height: 0, chars: [], fg: null, bg: null },
+        grid,
         settings: document.exportSettings,
         document,
       };

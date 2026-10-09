@@ -243,9 +243,12 @@ the document (`commitCellEffects` → `document.cellEffects`); neither is an
 individual undo step — undo/redo restores them along with the document
 snapshot they were committed to.
 
-**Exports:** MP4/GIF frames rasterize the composed timeline grid only, so
-cell effects are not yet baked into files; Phase 9's unified frame renderer
-adds them (and makes PNG match the preview).
+**Exports:** every static format (PNG, TXT, ASC, ANSI, JSON, HTML, SVG) and
+every MP4/GIF frame goes through the unified frame renderer in
+`core/export/frame.ts` — timeline frame → composed stack → cell-effect bake
+(settle-once, seeded, `1000/fps` ms per frame on a private runtime) — so cell
+effects are baked into every file and a still export equals the video's
+output at the same frame index.
 
 ## 7. Adding an effect
 

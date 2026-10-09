@@ -2,9 +2,13 @@
  * Timeline video export: renders every timeline frame to a PNG inside the
  * ffmpeg.wasm virtual FS and encodes it to MP4 (H.264) or GIF.
  *
- * Frame rendering reuses the exact composition the editor preview uses
- * (`applyTimelineToDocument` + `composeDocument`) and the PNG export's cell
- * metrics + subtexture mask, so the clip matches what is on screen.
+ * Frame rendering goes through the unified export frame renderer
+ * (`createExportFrameSession` in `core/export/frame.ts`): the same composed
+ * stack, timeline evaluation and cell-effect bake that the PNG and text
+ * exports serialize, advanced one frame per timeline frame — so every format
+ * shows the same frame at the same frame index. Rasterization reuses the PNG
+ * export's cell metrics + subtexture mask, so the clip matches what is on
+ * screen.
  *
  * The ffmpeg core is loaded from `public/ffmpeg/` (vendored by
  * scripts/prepare-ffmpeg-core.mjs): via fetch when the page runs over http,
@@ -12,10 +16,9 @@
  */
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import type { Document } from '../core/types';
+import type { AsciiGrid, Document } from '../core/types';
 import type { Timeline } from '../core/timeline/timeline';
-import { applyTimelineToDocument } from '../core/timeline/timeline';
-import { composeDocument } from '../core/layer/compose';
+import { createExportFrameSession } from '../core/export/frame';
 import { drawGridToContext, type CanvasLike } from '../core/export/png';
 import { applySubtexture, shouldApplySubtexture } from '../core/subtexture';
 import {
@@ -84,16 +87,13 @@ function getFFmpeg(): Promise<FFmpeg> {
   return ffmpegPromise;
 }
 
-/** Render one timeline frame exactly as the editor preview shows it. */
-async function renderFramePng(
-  doc: Document,
-  timeline: Timeline,
-  frame: number,
+/** Rasterise one composed export frame to PNG bytes (PNG-export cell metrics). */
+async function rasterizeFramePng(
+  grid: AsciiGrid,
   background: number,
   foreground: number,
+  subtexture: Document['canvas']['subtexture'],
 ): Promise<Uint8Array> {
-  const frameDoc = applyTimelineToDocument(doc, timeline, frame);
-  const grid = composeDocument(frameDoc);
   const canvas = window.document.createElement('canvas');
   canvas.width = grid.width * VIDEO_CELL.width * VIDEO_CELL.scale;
   canvas.height = grid.height * VIDEO_CELL.height * VIDEO_CELL.scale;
@@ -107,7 +107,6 @@ async function renderFramePng(
     background,
     foreground,
   });
-  const subtexture = doc.canvas.subtexture;
   if (shouldApplySubtexture(subtexture, canvas.width, canvas.height)) {
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
     applySubtexture(pixels.data, pixels.width, pixels.height, subtexture);
@@ -146,6 +145,11 @@ export async function exportVideo({
 
   const background = themeColor('--bg', 0x0c0c10);
   const foreground = themeColor('--fg', 0xd4d4d8);
+  // Same paper the PNG path hands the cell effects, so fades blend toward the
+  // colour the still export shows.
+  const paper = themeColor('--bg-elevated', background);
+  const renderFrame = createExportFrameSession(document, { timeline, paper });
+  const subtexture = document.canvas.subtexture;
   const output = videoOutputName(format);
   const written = [...frames.map((f) => frameFileName(f)), output];
   const onEncode = ({ progress }: { progress: number }) =>
@@ -154,9 +158,14 @@ export async function exportVideo({
 
   try {
     for (let i = 0; i < frames.length; i++) {
-      const png = await renderFramePng(document, timeline, frames[i], background, foreground);
+      const png = await rasterizeFramePng(
+        renderFrame(frames[i]),
+        background,
+        foreground,
+        subtexture,
+      );
       // writeFile transfers the underlying ArrayBuffer to the worker, so each
-      // frame must own its buffer (renderFramePng guarantees that).
+      // frame must own its buffer (rasterizeFramePng guarantees that).
       await ffmpeg.writeFile(frameFileName(frames[i]), png);
       report('render', (i + 1) / frames.length);
     }

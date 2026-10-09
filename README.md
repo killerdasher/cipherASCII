@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-1126%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-1134%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -192,6 +192,7 @@ Implemented and covered by the test suite:
 | Branding: cipherASCII logo, About dialog and Settings credit | working |
 | Export: TXT / ASC / ANSI / JSON / HTML / SVG / AAP / **PNG** / **MP4** / **GIF** | working |
 | Video export: every timeline frame rasterised and encoded with **ffmpeg.wasm** (H.264 MP4, single-pass palette GIF), progress bar in the Export panel | working |
+| Unified export frame renderer: one composed stack + timeline frame + cell-effect bake feeds PNG, text, HTML/SVG/JSON and every video frame | working |
 | Worker rendering with generation IDs (stale results are dropped) + stage progress in the status bar | working |
 | Worker pool: up to 4 slots; image analysis + generative-layer graphs run off-thread (single-flight, epoch-guarded replies) | working |
 | Stale-render settlement (`StaleRenderError`) + 60 ms render debounce | working |
@@ -357,7 +358,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 1126 tests / 60 files, ~10 s
+npm test                          # 1134 tests / 61 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables

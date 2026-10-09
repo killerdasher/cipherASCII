@@ -19,6 +19,8 @@ import {
 import { exportHtml, exportSvg } from './webExporters';
 
 export type { ExportContext };
+export { renderExportFrame, createExportFrameSession } from './frame';
+export type { ExportFrameOptions } from './frame';
 
 /**
  * One selectable output format.
