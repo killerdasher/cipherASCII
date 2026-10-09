@@ -25,6 +25,7 @@ import type {
   LayerId,
   ProjectMetadata,
   TextRenderSettings,
+  Timeline,
 } from '../types';
 import {
   cloneGrid,
@@ -89,6 +90,11 @@ export type Command =
   | { type: 'document/exportSettings'; patch: Partial<ExportSettings> }
   | { type: 'document/guides'; guides: Guide[] }
   | { type: 'document/activeLayer'; layerId: LayerId | null }
+  // The document's animation timeline (authoring data: tracks/keyframes/
+  // fps/duration). Playback transport lives on the same object but is view
+  // state — the store reconciles it across this command rather than treating
+  // the payload's transport fields as authoritative.
+  | { type: 'document/timeline'; timeline: Timeline | null }
   | { type: 'editor'; patch: Partial<EditorState> };
 
 function withLayer(
@@ -282,6 +288,14 @@ export function applyCommand(doc: Document, cmd: Command): Document {
       return cmd.layerId === null || doc.layers.some((l) => l.id === cmd.layerId)
         ? { ...doc, activeLayerId: cmd.layerId }
         : doc;
+    case 'document/timeline': {
+      if (cmd.timeline === null) return doc.timeline === null ? doc : { ...doc, timeline: null };
+      const tl = cmd.timeline;
+      if (typeof tl !== 'object' || typeof tl.id !== 'string' || tl.id.length === 0) return doc;
+      if (!Array.isArray(tl.tracks)) return doc;
+      if (doc.timeline === tl) return doc;
+      return { ...doc, timeline: tl };
+    }
     case 'editor':
       return { ...doc, editor: { ...doc.editor, ...cmd.patch } };
     default:

@@ -227,6 +227,26 @@ The grid path is assembled from `prepareSampledRaster` + `rasterToGrid` in
 `src/core/renderImage.ts`; `renderImageToGrid` is the two composed and stays
 byte-identical to them. Behaviour and coverage: `tests/unit/effectSpace.test.ts`.
 
+### Domain and policy
+
+Raster effects run in the worker *before* characters exist — they consume an
+RGBA source, so they apply to **image layers**. Text and generative layers
+have no source raster; their glyph-domain output is shaped by cell effects
+instead. Editing the pipeline is live preview: `commitEffects` mirrors the
+stack into `document.effectsPipeline`, marks the project dirty and re-renders,
+so a tweak shows up at once — and because the next render always starts from
+the source image, nothing is baked destructively.
+
+Cell effects run after composition on whatever grid the editor hands them, so
+they apply to every layer kind. Both stacks are preview state mirrored into
+the document (`commitCellEffects` → `document.cellEffects`); neither is an
+individual undo step — undo/redo restores them along with the document
+snapshot they were committed to.
+
+**Exports:** MP4/GIF frames rasterize the composed timeline grid only, so
+cell effects are not yet baked into files; Phase 9's unified frame renderer
+adds them (and makes PNG match the preview).
+
 ## 7. Adding an effect
 
 ```ts

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import React, { useState } from 'react';
-import { useStore, useStoreShallow, selectTimeline, selectActiveTimelineId } from '../store';
+import { useStore, useStoreShallow, selectTimeline } from '../store';
 import { Slider } from './Slider';
 import { ANIMATABLE_PROPERTIES, readTrackValue } from '../core/timeline/playback';
 
@@ -17,7 +17,6 @@ function TimelinePanelInner() {
   } = useStoreShallow(
     (s) => ({
       timeline: selectTimeline(s),
-      activeTimelineId: selectActiveTimelineId(s),
       createTimeline: s.createTimeline,
       addTimelineTrack: s.addTimelineTrack,
       removeTimelineTrack: s.removeTimelineTrack,

@@ -52,7 +52,7 @@ desktop shortcut named **cipherASCII**.
 | **Layers** | List of layers; show/hide, lock, duplicate, delete, add an 80x24 ASCII layer or a **Generative** layer |
 | **Properties** | Name, visibility, lock, opacity, X/Y offset; for text layers the text itself; for generative layers the graph, mapping strategy, dither, invert, density and glyph offset |
 | **ASCII** | The render controls: columns, render mode, character ramp (click a glyph to add it), custom ramp string, **Sort ramp dark → light** (heuristic ink coverage) and **Sort by measured ink** (rasterises each glyph on a canvas - best for injected CJK/emoji), offset, density, invert, dither algorithm + strength, brightness/contrast/gamma |
-| **Timeline** | Animation: transport (play/stop with looping), time display, ruler with click-to-seek, tracks with keyframes (◆ adds a keyframe at the playhead, click a diamond to remove it), onion skin |
+| **Timeline** | Animation: transport (play/stop with looping), time display, ruler with click-to-seek, tracks with keyframes (◆ adds a keyframe at the playhead, click a diamond to remove it), onion skin. Tracks and keyframes save with the project; **+ New Timeline** replaces the current one as a single undo step |
 
 ### Right dock
 
@@ -197,6 +197,11 @@ control:
    optionally with onion skin ghosts.
 5. **Export** -> MP4 or GIF to write the clip to disk (the Export panel shows
    render/encode progress).
+
+Track and keyframe edits are normal undoable steps (Ctrl+Z) and are saved
+with the project in `.aap`; the playhead position and transport are session
+view state and never mark the project dirty. **+ New Timeline** in the panel
+header swaps in a fresh timeline — one undo brings the old one back.
 
 ### Save and reopen
 

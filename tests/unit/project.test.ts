@@ -449,3 +449,85 @@ describe('detectFormat', () => {
     expect(detectFormat('   plain text')).toBe('txt');
   });
 });
+
+describe('timeline persistence', () => {
+  it('round-trips tracks, keyframes and easing through .aap', () => {
+    const base = createDocument();
+    const timeline: NonNullable<Document['timeline']> = {
+      ...base.timeline!,
+      name: 'Scene',
+      fps: 24,
+      duration: 96,
+      currentFrame: 12,
+      tracks: [
+        {
+          id: 't1',
+          name: 'Opacity',
+          layerId: base.layers[0].id,
+          property: 'opacity',
+          keyframes: [
+            { frame: 0, value: 0, easing: 'easeInOut' },
+            { frame: 48, value: 1 },
+          ],
+          enabled: true,
+        },
+      ],
+    };
+    const restored = value(deserializeProject(serializeProject({ ...base, timeline })));
+    expect(restored.timeline).toEqual(timeline);
+  });
+
+  it('repairs a malformed timeline field by field instead of trusting it', () => {
+    const base = createDocument();
+    const raw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+    raw.timeline = {
+      id: 7,
+      name: 42,
+      fps: null,
+      duration: 0,
+      currentFrame: 9999,
+      loop: 'yes',
+      playing: true,
+      onionSkinEnabled: 1,
+      onionSkinFrames: -5,
+      onionSkinOpacity: 9,
+      tracks: [
+        {
+          id: 'ok',
+          layerId: 'l',
+          property: 'x',
+          keyframes: [
+            { frame: 5, value: 1 },
+            { frame: 1, value: 0 },
+            { frame: 'x', value: 2 },
+          ],
+        },
+        { id: '', layerId: 'l', property: 'x', keyframes: [] },
+        { nope: true },
+      ],
+    };
+    const restored = value(deserializeProject(JSON.stringify(raw)));
+    const tl = restored.timeline;
+    expect(tl).not.toBeNull();
+    expect(tl!.id).toBe('timeline_main');
+    expect(tl!.name).toBe('Timeline');
+    expect(tl!.fps).toBe(30);
+    expect(tl!.duration).toBe(300);
+    expect(tl!.currentFrame).toBe(299);
+    expect(tl!.loop).toBe(true);
+    expect(tl!.playing).toBe(false);
+    expect(tl!.onionSkinEnabled).toBe(false);
+    expect(tl!.onionSkinFrames).toBe(1);
+    expect(tl!.onionSkinOpacity).toBe(1);
+    expect(tl!.tracks).toHaveLength(1);
+    expect(tl!.tracks[0].name).toBe('x');
+    expect(tl!.tracks[0].enabled).toBe(true);
+    expect(tl!.tracks[0].keyframes.map((k) => k.frame)).toEqual([1, 5]);
+  });
+
+  it('keeps an explicitly absent timeline null', () => {
+    const base = createDocument({ timeline: null });
+    const restored = value(deserializeProject(serializeProject(base)));
+    expect(restored.timeline).toBeNull();
+  });
+});

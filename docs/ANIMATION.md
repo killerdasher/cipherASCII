@@ -107,6 +107,30 @@ scene randomness derive from it, so `npm run demo -- --seed 7` is reproducible.
 Both rAF loops clamp `dt` to 64 ms so a backgrounded tab cannot teleport the
 animation on resume.
 
+## Timeline ↔ document
+
+`document.timeline` is the source of truth for animation authoring. It is
+written through the `document/timeline` command (`core/history/commands.ts`),
+so creating a timeline, adding/removing tracks and keyframing are ordinary
+undoable edits: they mark the project dirty and round-trip through `.aap`.
+`migrateDocument` repairs saved timelines field by field (`canonicalTimeline`
+in `core/project/serialize.ts`: finite fps/duration, clamped playhead,
+structureless tracks/keyframes dropped, keyframes frame-sorted) and a session
+always loads paused.
+
+The transport — `currentFrame`, `playing`, `loop`, the onion-skin flags — is
+**session view state** on the store slice: seeking or pressing play never
+dirties the project and never reaches the document. The store reconciles the
+slice after every document change (`reconcileTimeline`): authoring fields
+follow the document, the transport follows the screen for the same timeline
+id, and adopting a different timeline (load, undoing a timeline creation)
+starts paused.
+
+One document carries one timeline. The old multi-timeline store slice
+(`timelines[]`, `activeTimelineId`, `setActiveTimeline`) had no UI and was
+removed with Phase 7; **+ New Timeline** replaces the current timeline as a
+single undoable step.
+
 ## Determinism
 
 * `Rng` (`core/util.ts`) is a seeded xorshift-style generator with `next()`,

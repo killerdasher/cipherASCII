@@ -12,12 +12,16 @@ import {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_FX_SEED,
   DEFAULT_SUBTEXTURE,
+  type AnimationTrack,
   type CanvasSettings,
   type Document,
   type EditorState,
+  type EasingType,
   type Guide,
+  type Keyframe,
   type ProjectMetadata,
   type Result,
+  type Timeline,
   err,
   ok,
 } from '../types';
@@ -271,6 +275,91 @@ function canonicalGenerators(value: unknown): GeneratorGraph[] {
   return out;
 }
 
+/** Keyframes must be finite, value-bearing and frame-sorted; the rest drops. */
+function canonicalKeyframes(value: unknown): Keyframe<unknown>[] {
+  if (!Array.isArray(value)) return [];
+  const out: Keyframe<unknown>[] = [];
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    if (typeof raw.frame !== 'number' || !Number.isFinite(raw.frame)) continue;
+    if (!('value' in raw)) continue;
+    const kf: Keyframe<unknown> = { frame: Math.max(0, Math.floor(raw.frame)), value: raw.value };
+    if (typeof raw.easing === 'string') kf.easing = raw.easing as EasingType;
+    out.push(kf);
+  }
+  out.sort((a, b) => a.frame - b.frame);
+  return out;
+}
+
+/** Tracks need ids and targets; duplicates and structureless entries drop. */
+function canonicalTracks(value: unknown): AnimationTrack[] {
+  if (!Array.isArray(value)) return [];
+  const out: AnimationTrack[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    if (typeof raw.id !== 'string' || raw.id.length === 0) continue;
+    if (typeof raw.layerId !== 'string' || typeof raw.property !== 'string') continue;
+    if (seen.has(raw.id)) continue;
+    seen.add(raw.id);
+    out.push({
+      id: raw.id,
+      name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : raw.property,
+      layerId: raw.layerId,
+      property: raw.property,
+      keyframes: canonicalKeyframes(raw.keyframes),
+      enabled: raw.enabled !== false,
+    });
+  }
+  return out;
+}
+
+/**
+ * Repair a saved animation timeline, field by field.
+ *
+ * `null`/missing means "no timeline authored" and stays `null`; everything
+ * else is rebuilt from valid pieces: non-finite fps/duration fall back to the
+ * defaults, the playhead clamps into range, structureless tracks/keyframes
+ * drop, and `playing` always loads `false` — a session starts paused.
+ */
+function canonicalTimeline(value: unknown): Timeline | null {
+  if (value === null || value === undefined) return null;
+  if (!isPlainObject(value)) return null;
+  const fps =
+    typeof value.fps === 'number' && Number.isFinite(value.fps) && value.fps > 0
+      ? value.fps
+      : 30;
+  const duration =
+    typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration >= 1
+      ? Math.floor(value.duration)
+      : 300;
+  const rawFrame =
+    typeof value.currentFrame === 'number' && Number.isFinite(value.currentFrame)
+      ? Math.floor(value.currentFrame)
+      : 0;
+  const onionFrames =
+    typeof value.onionSkinFrames === 'number' && Number.isFinite(value.onionSkinFrames)
+      ? Math.min(10, Math.max(1, Math.floor(value.onionSkinFrames)))
+      : 1;
+  const onionOpacity =
+    typeof value.onionSkinOpacity === 'number' && Number.isFinite(value.onionSkinOpacity)
+      ? Math.min(1, Math.max(0, value.onionSkinOpacity))
+      : 0.3;
+  return {
+    id: typeof value.id === 'string' && value.id.length > 0 ? value.id : 'timeline_main',
+    name: typeof value.name === 'string' && value.name.length > 0 ? value.name : 'Timeline',
+    fps,
+    duration,
+    currentFrame: Math.min(Math.max(0, rawFrame), duration - 1),
+    tracks: canonicalTracks(value.tracks),
+    loop: value.loop !== false,
+    playing: false,
+    onionSkinEnabled: value.onionSkinEnabled === true,
+    onionSkinFrames: onionFrames,
+    onionSkinOpacity: onionOpacity,
+  };
+}
+
 export function migrateDocument(doc: Document): Result<Document> {
   try {
     if (!isPlainObject(doc)) return err('invalid-project', 'project must be an object');
@@ -307,7 +396,7 @@ export function migrateDocument(doc: Document): Result<Document> {
       effectsPipeline: doc.effectsPipeline ?? fallback.effectsPipeline,
       cellEffects: canonicalCellEffects(doc.cellEffects),
       paletteId: doc.paletteId ?? null,
-      timeline: doc.timeline ?? null,
+      timeline: canonicalTimeline(doc.timeline),
       renderPresets: Array.isArray(doc.renderPresets) ? doc.renderPresets : [],
       themeId: typeof doc.themeId === 'string' ? doc.themeId : 'medieval',
       // Schema 3: generator graphs and the procedural/cell-effect seed. Both

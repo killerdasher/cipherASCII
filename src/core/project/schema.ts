@@ -26,6 +26,7 @@ import {
   ok,
 } from '../types';
 import { createEffectsPipeline } from '../effects/pipeline';
+import { defaultTimeline } from '../timeline/timeline';
 import { isPrintableChar } from '../util';
 
 const DEFAULT_WIDTH = 80;
@@ -353,8 +354,9 @@ export function validateDocument(doc: unknown): Result<Document> {
  * The document carries `CURRENT_SCHEMA_VERSION`, a random id
  * (`crypto.randomUUID` when available, otherwise a time+random fallback),
  * ISO-8601 metadata timestamps, the default image/text/export settings from
- * `types.ts`, an 80x24 `Background` ascii layer of space cells, no source
- * image and no guides. `overrides` is merged shallowly over the defaults.
+ * `types.ts`, an 80x24 `Background` ascii layer of space cells, a default
+ * animation timeline, no source image and no guides. `overrides` is merged
+ * shallowly over the defaults.
  *
  * @param overrides - shallow replacements for any document fields
  * @returns a new document, unshared with any previous call
@@ -390,7 +392,7 @@ export function createDocument(overrides: Partial<Document> = {}): Document {
     effectsPipeline: createEffectsPipeline(),
     cellEffects: [],
     paletteId: null,
-    timeline: null,
+    timeline: defaultTimeline(),
     renderPresets: [],
     themeId: 'medieval',
     generators: [],

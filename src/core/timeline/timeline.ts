@@ -73,14 +73,22 @@ export interface Timeline {
   onionSkinOpacity: number;
 }
 
-export interface TimelineState {
-  timelines: Timeline[];
-  activeTimelineId: string | null;
+/**
+ * The timeline every fresh document starts with. Deterministic id so
+ * `createDocument()` output is stable for tests and golden fixtures.
+ */
+export function defaultTimeline(): Timeline {
+  return createTimeline('Main Timeline', 30, 300, 'timeline_main');
 }
 
-export function createTimeline(name: string, fps = 30, duration = 300): Timeline {
+export function createTimeline(
+  name: string,
+  fps = 30,
+  duration = 300,
+  id?: string,
+): Timeline {
   return {
-    id: `timeline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: id ?? `timeline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
     fps,
     duration,

@@ -441,3 +441,101 @@ describe('generative layers (store)', () => {
     expect(useStore.getState().document.generators.map((g) => g.id)).toEqual(['spare']);
   });
 });
+
+describe('timeline wired to the document', () => {
+  beforeEach(() => {
+    useStore.getState().newDocument();
+  });
+
+  it('a fresh document ships a paused default timeline mirrored into the slice', () => {
+    const st = useStore.getState();
+    expect(st.document.timeline?.id).toBe('timeline_main');
+    expect(st.document.timeline?.playing).toBe(false);
+    expect(st.timeline).toBe(st.document.timeline);
+    expect('timelines' in (st as unknown as Record<string, unknown>)).toBe(false);
+    expect('activeTimelineId' in (st as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  it('createTimeline is one undoable, dirtying document edit', () => {
+    useStore.getState().createTimeline('Cut', 24, 96);
+    let st = useStore.getState();
+    expect(st.document.timeline?.name).toBe('Cut');
+    expect(st.document.timeline?.fps).toBe(24);
+    expect(st.isDirty).toBe(true);
+    expect(st.timeline?.id).toBe(st.document.timeline?.id);
+
+    useStore.getState().undo();
+    st = useStore.getState();
+    expect(st.document.timeline?.id).toBe('timeline_main');
+    expect(st.timeline?.id).toBe('timeline_main');
+
+    useStore.getState().redo();
+    expect(useStore.getState().document.timeline?.name).toBe('Cut');
+  });
+
+  it('track and keyframe edits persist to the document and undo restores it', () => {
+    const layerId = useStore.getState().document.layers[0].id;
+    useStore.getState().addTimelineTrack(layerId, 'opacity', 'Opacity');
+    expect(useStore.getState().document.timeline?.tracks).toHaveLength(1);
+    expect(useStore.getState().timeline?.tracks).toHaveLength(1);
+
+    const trackId = useStore.getState().document.timeline!.tracks[0].id;
+    useStore.getState().setTimelineKeyframe(trackId, 10, 0.5);
+    expect(useStore.getState().document.timeline?.tracks[0].keyframes).toHaveLength(1);
+
+    // The track add and the keyframe share a coalesce key inside the 800 ms
+    // window, so they leave history as a single step.
+    useStore.getState().undo();
+    expect(useStore.getState().document.timeline?.tracks).toHaveLength(0);
+    expect(useStore.getState().timeline?.tracks).toHaveLength(0);
+    useStore.getState().redo();
+    expect(useStore.getState().document.timeline?.tracks[0].keyframes).toHaveLength(1);
+  });
+
+  it('transport is view state: seeking never dirties the project or renders', () => {
+    useStore.getState().markClean();
+    const gen = useStore.getState().renderGeneration;
+    const docTl = useStore.getState().document.timeline;
+
+    useStore.getState().setTimelineCurrentFrame(42);
+    useStore.getState().setTimelinePlaying(true);
+    useStore.getState().setOnionSkin(true, 2, 0.5);
+
+    const st = useStore.getState();
+    expect(st.timeline?.currentFrame).toBe(42);
+    expect(st.timeline?.playing).toBe(true);
+    expect(st.timeline?.onionSkinFrames).toBe(2);
+    expect(st.document.timeline).toBe(docTl);
+    expect(st.isDirty).toBe(false);
+    expect(st.renderGeneration).toBe(gen);
+  });
+
+  it('undoing an authoring edit keeps the live transport on screen', () => {
+    const layerId = useStore.getState().document.layers[0].id;
+    useStore.getState().setTimelineCurrentFrame(17);
+    useStore.getState().setTimelinePlaying(true);
+    useStore.getState().addTimelineTrack(layerId, 'x', 'X');
+
+    useStore.getState().undo();
+    const st = useStore.getState();
+    expect(st.document.timeline?.tracks).toHaveLength(0);
+    expect(st.timeline?.currentFrame).toBe(17);
+    expect(st.timeline?.playing).toBe(true);
+  });
+
+  it('loading a project adopts its timeline and starts paused', () => {
+    const saved = {
+      ...useStore.getState().document.timeline!,
+      name: 'Saved',
+      fps: 12,
+      currentFrame: 9,
+      playing: true,
+    };
+    useStore.getState().setDocument({ ...useStore.getState().document, timeline: saved });
+    const st = useStore.getState();
+    expect(st.timeline?.name).toBe('Saved');
+    expect(st.timeline?.currentFrame).toBe(9);
+    expect(st.timeline?.playing).toBe(false);
+    expect(st.isDirty).toBe(false);
+  });
+});

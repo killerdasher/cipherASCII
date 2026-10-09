@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/ci.yml)
 [![Release](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml/badge.svg)](https://github.com/killerdasher/cipherASCII/actions/workflows/release.yml)
-[![tests](https://img.shields.io/badge/tests-1101%20passing-brightgreen)](#verification)
+[![tests](https://img.shields.io/badge/tests-1113%20passing-brightgreen)](#verification)
 [![typecheck](https://img.shields.io/badge/typecheck-0%20errors-2cbe4e)](#verification)
 [![lint](https://img.shields.io/badge/eslint-0%20errors-2cbe4e)](#verification)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -184,7 +184,7 @@ Implemented and covered by the test suite:
 | Canvas presets (TikTok / square / wide / HD) snapped to the 8 x 16 cell grid | working |
 | PixiJS GPU preview: WebGL viewport + CRT shader, automatic 2D fallback | working |
 | Palettes, including **Auto Palette** (5 dominant colours of the source image) | working |
-| Timeline: tracks, keyframes (add/remove on the track), playhead, click-to-seek, transport playback | working |
+| Timeline: tracks, keyframes (add/remove on the track), playhead, click-to-seek, transport playback; saved with the project as undoable document edits | working |
 | Themes: 10 presets (6 original + Gothic / Cyber Y2K / Cafe / Zelda), canvas included | working |
 | Tailwind v3 utilities layered over the theme's CSS variables | working |
 | View state: zoom, grid overlay, CRT bloom toggle | working |
@@ -356,7 +356,7 @@ The repo is kept green:
 ```bash
 npm run typecheck                 # 0 errors (renderer + electron)
 npm run lint                      # 0 errors (ESLint flat config)
-npm test                          # 1101 tests / 59 files, ~10 s
+npm test                          # 1113 tests / 59 files, ~10 s
 npm run demo                      # signature animation demo (golden-checked)
 npm run calibrate                 # regenerate the glyph calibration table
 npm run bench                     # render / text / dither throughput tables

@@ -5,6 +5,7 @@ import { createGrid, gridToLines, linesToGrid } from '../../src/core/grid';
 import type { AsciiGrid, AsciiLayer, CreativeLayer, Document } from '../../src/core/types';
 import { DEFAULT_CREATIVE_RENDER } from '../../src/core/types';
 import { defaultGeneratorGraph } from '../../src/core/generators/edit';
+import { createTimeline } from '../../src/core/timeline/timeline';
 
 function layer(id: string, grid: AsciiGrid, name = id): AsciiLayer {
   return {
@@ -615,5 +616,34 @@ describe('applyCommand: generative layer and generators', () => {
     expect(removed.generators).toHaveLength(0);
     expect(base.generators).toHaveLength(1);
     expect(applyCommand(removed, { type: 'generator/remove', graphId: 'ghost' })).toBe(removed);
+  });
+});
+
+describe('applyCommand: document timeline', () => {
+  it('installs a new timeline and no-ops on an identical payload', () => {
+    const base = createDocument();
+    const next = applyCommand(base, {
+      type: 'document/timeline',
+      timeline: createTimeline('Cut', 24, 96),
+    });
+    expect(next.timeline?.name).toBe('Cut');
+    expect(next.timeline?.fps).toBe(24);
+    expect(next.timeline?.duration).toBe(96);
+    expect(applyCommand(next, { type: 'document/timeline', timeline: next.timeline! })).toBe(next);
+  });
+
+  it('clears an existing timeline with null and no-ops when already null', () => {
+    const base = createDocument();
+    const cleared = applyCommand(base, { type: 'document/timeline', timeline: null });
+    expect(cleared.timeline).toBeNull();
+    expect(applyCommand(cleared, { type: 'document/timeline', timeline: null })).toBe(cleared);
+  });
+
+  it('rejects structureless timelines instead of corrupting the document', () => {
+    const base = createDocument();
+    const noId = { ...createTimeline('Broken'), id: '' };
+    expect(applyCommand(base, { type: 'document/timeline', timeline: noId })).toBe(base);
+    const noTracks = { ...createTimeline('Broken'), tracks: 'nope' } as unknown as typeof noId;
+    expect(applyCommand(base, { type: 'document/timeline', timeline: noTracks })).toBe(base);
   });
 });

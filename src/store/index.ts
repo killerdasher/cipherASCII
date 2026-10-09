@@ -93,10 +93,11 @@ export interface AppState {
   /** Seed for the cell-effect RNG; the same seed always draws the same frame. */
   fxSeed: number;
 
-  // Timeline / Animation
+  // Timeline / Animation. Authoring data (tracks/keyframes/fps/duration)
+  // lives in `document.timeline` as a document/timeline command; this slice
+  // mirrors it and adds the transport (playhead, playing, loop, onion skin),
+  // which is session view state and never dirties the project.
   timeline: Timeline | null;
-  timelines: Timeline[];
-  activeTimelineId: string | null;
 
   // Palettes
   palettes: Palette[];
@@ -239,7 +240,6 @@ export interface AppState {
 
   // Actions - Timeline
   createTimeline: (name?: string, fps?: number, duration?: number) => void;
-  setActiveTimeline: (timelineId: string | null) => void;
   addTimelineTrack: (layerId: string, property: string, name?: string) => void;
   removeTimelineTrack: (trackId: string) => void;
   setTimelineKeyframe: (trackId: string, frame: number, value: any, easing?: string) => void;
@@ -320,7 +320,57 @@ const GRID_EDIT_COMMANDS: ReadonlySet<Command['type']> = new Set([
 const initialDocument = createDocument();
 const defaultTheme = getDefaultTheme();
 const defaultEffectsPipeline = createEffectsPipeline();
-const defaultTimeline = createTimeline('Main Timeline', 30, 300);
+
+/**
+ * Merge the document's timeline into the transport view.
+ *
+ * Authoring fields always come from the document (that is the persisted
+ * truth); the transport survives authoring edits and undo/redo for the same
+ * timeline id and resets when a different timeline is adopted — a fresh
+ * timeline or a loaded project starts paused.
+ */
+const reconcileTimeline = (view: Timeline | null, docTl: Timeline | null): Timeline | null => {
+  if (!docTl) return null;
+  if (view && view.id === docTl.id) {
+    if (view === docTl) return view;
+    return {
+      ...docTl,
+      currentFrame: view.currentFrame,
+      playing: view.playing,
+      loop: view.loop,
+      onionSkinEnabled: view.onionSkinEnabled,
+      onionSkinFrames: view.onionSkinFrames,
+      onionSkinOpacity: view.onionSkinOpacity,
+    };
+  }
+  return docTl.playing ? { ...docTl, playing: false } : docTl;
+};
+
+/**
+ * The transport view after adopting a document wholesale (new/load): the
+ * document's own timeline wins and the session starts paused.
+ */
+const adoptTimeline = (docTl: Timeline | null): Timeline | null =>
+  docTl && docTl.playing ? { ...docTl, playing: false } : docTl;
+
+/**
+ * The transport view after a document swap (command, undo, redo, load).
+ *
+ * Structural sharing makes timeline identity exact: snapshots that never
+ * touched the timeline share the same reference, so the view is left alone.
+ */
+const timelineAfterDocument = (
+  prev: Document,
+  next: Document,
+  view: Timeline | null,
+): Timeline | null => {
+  const aligned =
+    (view === null && next.timeline === null) ||
+    (view !== null && next.timeline !== null && view.id === next.timeline.id);
+  return prev.timeline !== next.timeline || !aligned
+    ? reconcileTimeline(view, next.timeline)
+    : view;
+};
 
 export const useStore = create<AppState>()(
   subscribeWithSelector((set, get) => {
@@ -379,9 +429,7 @@ export const useStore = create<AppState>()(
       effectsPipeline: defaultEffectsPipeline,
       cellEffects: [],
       fxSeed: initialDocument.fxSeed,
-      timeline: defaultTimeline,
-      timelines: [defaultTimeline],
-      activeTimelineId: defaultTimeline.id,
+      timeline: initialDocument.timeline,
 
       palettes: PRESET_PALETTES,
       activePaletteId: PRESET_PALETTES[0]?.id ?? null,
@@ -432,6 +480,7 @@ export const useStore = create<AppState>()(
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
           fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
+          timeline: adoptTimeline(doc.timeline),
         });
         get().triggerRender();
       },
@@ -447,12 +496,14 @@ export const useStore = create<AppState>()(
           effectsPipeline: doc.effectsPipeline ?? createEffectsPipeline(),
           cellEffects: doc.cellEffects ?? [],
           fxSeed: doc.fxSeed ?? DEFAULT_FX_SEED,
+          // A load adopts the document's timeline; the transport resets.
+          timeline: adoptTimeline(doc.timeline),
         });
         get().triggerRender();
       },
 
       applyCommand: (cmd) => {
-        const { document, history } = get();
+        const { document, history, timeline } = get();
         const next = applyCommand(document, cmd);
         if (next === document) return;
         if (RENDER_OUTPUT_COMMANDS.has(cmd.type)) {
@@ -460,12 +511,16 @@ export const useStore = create<AppState>()(
           return;
         }
         history.push(next, { key: cmd.type });
-        set({ document: next, isDirty: true });
-        if (!GRID_EDIT_COMMANDS.has(cmd.type)) get().triggerRender();
+        set({ document: next, isDirty: true, timeline: timelineAfterDocument(document, next, timeline) });
+        // Authoring the timeline needs no worker pass: the preview recomposes
+        // from the document directly.
+        if (!GRID_EDIT_COMMANDS.has(cmd.type) && cmd.type !== 'document/timeline') {
+          get().triggerRender();
+        }
       },
 
       undo: () => {
-        const { history, document } = get();
+        const { history, document, timeline } = get();
         const prev = history.undo();
         if (prev) {
           set({
@@ -474,6 +529,7 @@ export const useStore = create<AppState>()(
             effectsPipeline: prev.effectsPipeline ?? createEffectsPipeline(),
             cellEffects: prev.cellEffects ?? [],
             fxSeed: prev.fxSeed ?? DEFAULT_FX_SEED,
+            timeline: timelineAfterDocument(document, prev, timeline),
           });
           // Only re-render when the undo restored render-affecting settings;
           // re-rendering a paint undo would regenerate the layer and wipe it.
@@ -482,7 +538,7 @@ export const useStore = create<AppState>()(
       },
 
       redo: () => {
-        const { history, document } = get();
+        const { history, document, timeline } = get();
         const next = history.redo();
         if (next) {
           set({
@@ -491,6 +547,7 @@ export const useStore = create<AppState>()(
             effectsPipeline: next.effectsPipeline ?? createEffectsPipeline(),
             cellEffects: next.cellEffects ?? [],
             fxSeed: next.fxSeed ?? DEFAULT_FX_SEED,
+            timeline: timelineAfterDocument(document, next, timeline),
           });
           if (renderSettingsChanged(document, next)) get().triggerRender();
         }
@@ -840,99 +897,87 @@ export const useStore = create<AppState>()(
         set({ fxSeed: next, document: { ...doc, fxSeed: next }, isDirty: true });
       },
 
-      // Timeline
+      // Timeline. Authoring edits dispatch `document/timeline`, so they are
+      // undoable, dirty the project and round-trip through .aap; applyCommand
+      // reconciles this slice from the document.
       createTimeline: (name = 'New Timeline', fps = 30, duration = 300) => {
-        const timeline = createTimeline(name, fps, duration);
-        set((state) => ({
-          timelines: [...state.timelines, timeline],
-          timeline,
-          activeTimelineId: timeline.id,
-        }));
-      },
-
-      setActiveTimeline: (timelineId) => {
-        const { timelines } = get();
-        const timeline = timelines.find((t) => t.id === timelineId) ?? null;
-        set({ activeTimelineId: timelineId, timeline });
+        get().applyCommand({
+          type: 'document/timeline',
+          timeline: createTimeline(name, fps, duration),
+        });
       },
 
       addTimelineTrack: (layerId, property, name) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const { timeline } = get();
         if (!timeline) return;
-        const updated = addTrack(timeline, layerId, property, name);
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+        get().applyCommand({
+          type: 'document/timeline',
+          timeline: addTrack(timeline, layerId, property, name),
         });
       },
 
       removeTimelineTrack: (trackId) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const { timeline } = get();
         if (!timeline) return;
-        const updated = removeTrack(timeline, trackId);
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+        get().applyCommand({
+          type: 'document/timeline',
+          timeline: removeTrack(timeline, trackId),
         });
       },
 
       setTimelineKeyframe: (trackId, frame, value, easing = 'linear') => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const { timeline } = get();
         if (!timeline) return;
-        const updated = setKeyframe(timeline, trackId, frame, value, easing as any);
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+        get().applyCommand({
+          type: 'document/timeline',
+          timeline: setKeyframe(timeline, trackId, frame, value, easing as any),
         });
       },
 
       removeTimelineKeyframe: (trackId, frame) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const { timeline } = get();
         if (!timeline) return;
-        const updated = removeKeyframe(timeline, trackId, frame);
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+        get().applyCommand({
+          type: 'document/timeline',
+          timeline: removeKeyframe(timeline, trackId, frame),
         });
       },
 
+      // Transport: session view state. These never touch the document, so
+      // seeking or playing cannot dirty the project.
       setTimelineCurrentFrame: (frame) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const timeline = get().timeline;
         if (!timeline) return;
-        const updated = { ...timeline, currentFrame: Math.max(0, Math.min(timeline.duration - 1, frame)) };
         set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+          timeline: {
+            ...timeline,
+            currentFrame: Math.max(0, Math.min(timeline.duration - 1, frame)),
+          },
         });
       },
 
       setTimelinePlaying: (playing) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const timeline = get().timeline;
         if (!timeline) return;
-        const updated = { ...timeline, playing };
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
-        });
+        set({ timeline: { ...timeline, playing } });
       },
 
       setTimelineLoop: (loop) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const timeline = get().timeline;
         if (!timeline) return;
-        const updated = { ...timeline, loop };
-        set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
-        });
+        set({ timeline: { ...timeline, loop } });
       },
 
       setOnionSkin: (enabled, frames = 1, opacity = 0.3) => {
-        const { timeline, timelines, activeTimelineId } = get();
+        const timeline = get().timeline;
         if (!timeline) return;
-        const updated = { ...timeline, onionSkinEnabled: enabled, onionSkinFrames: frames, onionSkinOpacity: opacity };
         set({
-          timeline: updated,
-          timelines: timelines.map((t) => (t.id === activeTimelineId ? updated : t)),
+          timeline: {
+            ...timeline,
+            onionSkinEnabled: enabled,
+            onionSkinFrames: frames,
+            onionSkinOpacity: opacity,
+          },
         });
       },
 
@@ -1140,8 +1185,6 @@ export const selectEffectsPipeline = (state: AppState) => state.effectsPipeline;
 export const selectCellEffects = (state: AppState) => state.cellEffects;
 export const selectFxSeed = (state: AppState) => state.fxSeed;
 export const selectTimeline = (state: AppState) => state.timeline;
-export const selectTimelines = (state: AppState) => state.timelines;
-export const selectActiveTimelineId = (state: AppState) => state.activeTimelineId;
 export const selectPalettes = (state: AppState) => state.palettes;
 export const selectActivePaletteId = (state: AppState) => state.activePaletteId;
 export const selectRenderPresets = (state: AppState) => state.renderPresets;
