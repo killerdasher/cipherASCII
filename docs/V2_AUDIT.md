@@ -257,8 +257,9 @@ Design rules carried into every phase:
 - **Worker pool, not ad-hoc workers**; keep `jobId`/generation staleness protocol.
 - **Core stays pure TS, DOM-free**; tests in Node; golden fixtures updated with
   `UPDATE_GOLDEN=1` only when a change is intentional.
-- **CI gate must stay green:** typecheck, lint, 820 tests, `demo`, `bench:engines`
-  (semantic assertions), `build`, `build:electron`.
+- **CI gate must stay green:** typecheck, lint, all tests (1187 / 69 files at the
+  V2 close-out), `demo`, `bench:engines` (semantic assertions), `build`,
+  `build:electron`.
 - **Zero new runtime deps** without justification.
 
 ---
@@ -279,8 +280,15 @@ Design rules carried into every phase:
 | 9 | Unified export (one frame renderer, all formats, cell effects included) | 5, 7 | done |
 | 10 | Persistence completeness + autosave + native dialogs | 1 | done |
 | 11 | Performance pass vs `PERFORMANCE.md` baselines (P1–P9) | 8 | done |
-| 12 | Docs, README, benchmarks, screenshots refresh | all | pending |
+| 12 | Docs, README, benchmarks, screenshots refresh | all | done |
 
 Phase exit rule: typecheck + lint + all tests + demo + bench:engines green, golden
 fixtures regenerated only with intent, README/docs updated in the same commit as the
 behavior change.
+
+**Status (V2 close-out):** phases 0–12 are all done and CI-green on `main`
+(1187 tests / 69 files). Remaining gaps are recorded, not hidden: the per-frame
+PNG encode in video export (`PERFORMANCE.md` §6 item 6), the deliberate
+`effectSpace: 'source'` default (P7, with the measured `'grid'` escape hatch),
+the missing byte budget on the undo stack (P9), and packaged-Electron smoke
+testing, which still needs a human (A9 — no display in this environment).

@@ -59,7 +59,7 @@ desktop shortcut named **cipherASCII**.
 | Tab | What it does |
 | --- | --- |
 | **Export** | Pick a format (TXT, ASC, ANSI, JSON, HTML, SVG, AAP, PNG, MP4, GIF), preview the output, download it. MP4/GIF render the whole timeline with a progress bar |
-| **Effects** | Ordered effect stack: add, remove, reorder, tune each parameter. 19 effects are available |
+| **Effects** | Ordered effect stack: add, remove, reorder, tune each parameter. 45 cell effects are available |
 | **Palette** | Palettes list, create/import, edit colours, sort by luminance/hue/saturation, and **Auto Palette - 5 Colors**; palettes save with the project |
 | **Presets** | Save the current render settings as a named preset and re-apply it later; presets save with the project |
 | **Theme** | 10 built-in themes (Medieval, Dither Boy, Terminal Green, Terminal Amber, Light, High Contrast, Gothic Medieval, Cyber Y2K, Cozy Cafe French, Zelda / RPG) plus a "Create Custom Theme" dialog; custom themes save with the project |

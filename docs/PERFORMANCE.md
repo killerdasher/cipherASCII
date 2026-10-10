@@ -24,48 +24,52 @@ ratio, not the absolute time.
 
 ## 2. Measured: core pipeline (`npm run bench`)
 
+_Refreshed for the V2 close-out (Phase 12); best-of-N methodology unchanged._
+
 ### image → ASCII (columns = 160, best of 5)
 
 | source | ms | grid | cells/s |
 | --- | --- | --- | --- |
-| 256×256 | 3.53 | 160×80 | 3,624,995 |
-| 512×512 | 5.76 | 160×80 | 2,221,912 |
-| 1024×1024 | 13.03 | 160×80 | 982,494 |
+| 256×256 | 3.10 | 160×80 | 4,131,753 |
+| 512×512 | 5.29 | 160×80 | 2,421,702 |
+| 1024×1024 | 12.30 | 160×80 | 1,040,472 |
 
 ### text → ASCII (font = block)
 
 | input | ms | grid | cells/s |
 | --- | --- | --- | --- |
-| 50 chars | 0.37 | 227×15 | 9,150,274 |
-| 5000 chars | 24.91 | 227×1183 | 10,780,966 |
+| 50 chars | 0.35 | 227×15 | 9,765,905 |
+| 5000 chars | 23.90 | 227×1183 | 11,236,729 |
 
 ### dither (256×256 → 8 levels, best of 20, 52 algorithms)
 
 | algorithm | ms | px/s |
 | --- | --- | --- |
-| none | 2.526 | 25,945,203 |
-| threshold | 2.544 | 25,760,490 |
-| bayer2 | 3.600 | 18,205,390 |
+| none | 2.572 | 25,484,533 |
+| threshold | 2.612 | 25,092,648 |
+| bayer2 | 3.739 | 17,528,033 |
 
 Full table: run `npm run bench` (the suite takes ~8.5 s; error-diffusion
 kernels are the slow end, ordered/threshold the fast end).
 
 ## 3. Measured: the new engines (`npm run bench:engines`)
 
+_Refreshed for the V2 close-out (Phase 12); best-of-N methodology unchanged._
+
 ### Cell effects — ms per frame (best of 20)
 
 | grid | effect | ms | cells/s |
 | --- | --- | --- | --- |
-| 100×50 | decrypt | 1.082 | 4,620,683 |
-| 100×50 | rain | 0.622 | 8,037,435 |
-| 100×50 | scatter | 1.128 | 4,431,324 |
-| 100×50 | cipherlock | 0.798 | 6,264,895 |
-| 200×100 | decrypt | 4.030 | 4,963,023 |
-| 200×100 | rain | 2.247 | 8,900,717 |
-| 200×100 | scatter | 4.309 | 4,641,239 |
-| 200×100 | cipherlock | 3.046 | 6,566,641 |
+| 100×50 | decrypt | 1.237 | 4,042,717 |
+| 100×50 | rain | 0.695 | 7,192,216 |
+| 100×50 | scatter | 1.282 | 3,901,501 |
+| 100×50 | cipherlock | 0.908 | 5,505,504 |
+| 200×100 | decrypt | 4.319 | 4,630,434 |
+| 200×100 | rain | 2.565 | 7,796,602 |
+| 200×100 | scatter | 4.716 | 4,240,542 |
+| 200×100 | cipherlock | 3.478 | 5,750,360 |
 
-At 16.6 ms of frame budget, a 200×100 grid spends **3–4 ms** on the heaviest
+At 16.6 ms of frame budget, a 200×100 grid spends **3–5 ms** on the heaviest
 effect measured — about 20 % of the budget, leaving the paint pass and the
 compositor the rest.
 
@@ -73,19 +77,19 @@ compositor the rest.
 
 | grid | effect | ms/frame |
 | --- | --- | --- |
-| 100×50 | rain | 0.627 |
-| 100×50 | cipherlock | 0.817 |
-| 200×100 | rain | 2.351 |
-| 200×100 | cipherlock | 3.082 |
+| 100×50 | rain | 0.691 |
+| 100×50 | cipherlock | 0.885 |
+| 200×100 | rain | 2.661 |
+| 200×100 | cipherlock | 3.494 |
 
 ### Bridge throughput (best of 50)
 
 | grid | →plane ms | cells/s | →grid ms | cells/s |
 | --- | --- | --- | --- | --- |
-| 100×50 | 0.210 | 23,775,559 | 0.018 | 270,431,067 |
-| 200×100 | 0.836 | 23,928,826 | 0.076 | 262,850,083 |
+| 100×50 | 0.247 | 20,278,053 | 0.020 | 245,134,088 |
+| 200×100 | 0.992 | 20,164,136 | 0.083 | 240,717,338 |
 
-Readback is ~10× cheaper than the write because it reuses a buffer instead of
+Readback is ~12× cheaper than the write because it reuses a buffer instead of
 allocating one — that reuse is what makes the editor's effect loop
 allocation-free after the first frame.
 
@@ -93,8 +97,8 @@ allocation-free after the first frame.
 
 | grid | clone/cell (old) | clone/once (now) | speedup | cells touched |
 | --- | --- | --- | --- | --- |
-| 100×50 | 0.429 ms | 0.018 ms | **24.0×** | 320,000 |
-| 200×100 | 4.139 ms | 0.073 ms | **56.8×** | 1,280,000 |
+| 100×50 | 0.334 ms | 0.011 ms | **30.4×** | 320,000 |
+| 200×100 | 6.019 ms | 0.074 ms | **81.7×** | 1,280,000 |
 
 The old path cloned the whole grid once per touched cell per interpolated step
 (`chars.slice()` + two `Int32Array.from`). The stroke now clones **once** at
@@ -105,8 +109,8 @@ grid, so history semantics are unchanged.
 
 | grid | composite ms | diff (clean) ms | clean changed cells | dirty strategy |
 | --- | --- | --- | --- | --- |
-| 100×50 | 0.774 | 0.082 | 0 | `diff` |
-| 200×100 | 3.418 | 0.222 | 0 | `diff` |
+| 100×50 | 1.121 | 0.061 | 0 | `diff` |
+| 200×100 | 4.289 | 0.289 | 0 | `diff` |
 
 An unchanged frame diffs to `changed = 0` in well under a millisecond, which
 is the condition that lets an idle editor skip the repaint entirely; a
@@ -117,10 +121,10 @@ contiguous recoloured band (what an animated band looks like) stays in the
 
 | tweens | ms | tweens/s |
 | --- | --- | --- |
-| 1,000 | 0.030 | 33,750,717 |
-| 10,000 | 0.132 | 75,983,223 |
+| 1,000 | 0.030 | 32,846,116 |
+| 10,000 | 0.183 | 54,535,737 |
 
-Ten thousand simultaneous tweens cost 0.13 ms — the animation core is not a
+Ten thousand simultaneous tweens cost 0.18 ms — the animation core is not a
 constraint at any realistic scene size.
 
 ## 4. Changes made and verified
@@ -131,7 +135,7 @@ constraint at any realistic scene size.
 | Worker pool (lazy spawn, up to 4 slots) for render/analysis/creative | Image analysis and creative-layer graph evaluation (measured 18.5 ms at 480×200) run off-thread; analysis single-flights and survives generation bumps; creative replies are epoch-guarded so out-of-order results never land | `worker.test.ts` pool describe (6), `store.test.ts` pool (2), `imageImport.test.ts` (2), `imageAnalysis.test.ts` (3) |
 | Result + `pendingRender` generation checks in `App.tsx` | A stale render can no longer clobber a newer grid or clear the pending flag | same |
 | 60 ms render debounce | Slider bursts coalesce into one worker render | code + status path; manual verification |
-| Clone-once brush stroke | 24–57× faster per 64-cell stroke | `npm run bench:engines` |
+| Clone-once brush stroke | 30–82× faster per 64-cell stroke | `npm run bench:engines` |
 | Cached `fillStyle`, single-path grid lines, resize-only backing store | Fewer canvas state resets and string parses per paint | code (DOM paint not measurable in Node) |
 | `React.memo` on 12 panels + hoisted cursor literal; narrow store selectors (Phase 11) | Panels skip re-renders caused by unrelated App state; the five former whole-state subscriptions no longer wake on status/perf/view writes | `tests/unit/panelStoreSubscriptions.test.tsx` (4 cases) |
 | Interned glyphs, packed colours, SoA planes | Frame storage in indices, not strings | `docs/RENDERING.md` |
@@ -154,15 +158,15 @@ and `needsFrames` becomes false) — asserted in `tests/unit/fxRuntime.test.ts`
 ## 6. Known costs / still open
 
 These are real and documented rather than papered over (they come from
-`docs/ARCHITECTURE_AUDIT.md`). Three of the five are now closed:
+`docs/ARCHITECTURE_AUDIT.md`). Three of the six are now closed:
 
 1. **Raster effects run at source resolution by default** (`render.worker.ts`)
    before the downscale to columns — a 4000×3000 photo is blurred at full res
    to produce ~100 columns. `npm run bench:engines` quantifies it: the
-   six-effect stack runs at a flat **1.4–1.5 Mpx/s** regardless of size (512²
-   ≈ 168 ms, 1024² ≈ 607 ms, 2048² ≈ 2781 ms), so a 12 Mpx photo costs
-   **~8 s** per render. `blur` (43 ms) and `bloom` (57 ms) dominate at 512²;
-   the rest are single-digit to ~17 ms.
+   six-effect stack runs at a flat **1.9–2.3 Mpx/s** regardless of size (512²
+   ≈ 116 ms, 1024² ≈ 460 ms, 2048² ≈ 2217 ms), so a 12 Mpx photo costs
+   **~6 s** per render. `bloom` (44 ms) and `blur` (40 ms) dominate at 512²;
+   the rest are single-digit to ~15 ms.
 
    **Escape hatch (Settings → Image Settings → Effects):** `effectSpace:
    'grid'` runs the same stack between resize and preprocessing, on the

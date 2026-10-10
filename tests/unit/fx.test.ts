@@ -45,8 +45,10 @@ function runPipeline(plane: Plane, effectId: string, frames = 48, options: RunOp
 describe('effect registry', () => {
   it('registers a substantial library with unique ids', () => {
     const effects = listCellEffects();
+    // Pins the documented registry size (README / USER_GUIDE / EFFECTS.md):
+    // bumping the library must update this test and the docs together.
+    expect(EFFECT_COUNT).toBe(45);
     expect(effects.length).toBe(EFFECT_COUNT);
-    expect(effects.length).toBeGreaterThanOrEqual(40);
     const ids = effects.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
